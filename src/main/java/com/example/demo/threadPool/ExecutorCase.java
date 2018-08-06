@@ -43,7 +43,7 @@ public class ExecutorCase {
     }
 
     /**
-     * 任务类
+     * 任务类添加
      */
     static class Task implements Callable<String>{
         @Override
