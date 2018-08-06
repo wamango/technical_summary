@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration debug="true" scan="true" scanPeriod="30 seconds">
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+    <!-- 配置ELK -->
+    <!-- LogStash -->
+    <appender name="Async-Appender" class="net.logstash.logback.appender.LoggingEventAsyncDisruptorAppender">
+        <waitStrategyType>sleeping</waitStrategyType>
+        <appender name="Logstash-Appender"
+                  class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+            <destination>172.18.90.41:4567</destination>
+            <connectionStrategy>
+                <roundRobin>
+                    <connectionTTL>5 minutes</connectionTTL>
+                </roundRobin>
+            </connectionStrategy>
+            <writeBufferSize>16384</writeBufferSize>
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <jsonFactoryDecorator class="com.zcs.test.config.MyJsonFactoryDecorator"/>
+                <providers>
+                    <timestamp>
+                        <pattern>yyyy-MM-dd'T'HH:mm:ss.SSSZZ</pattern>
+                    </timestamp>
+                    <pattern>
+                        <pattern>
+                            {
+                            "project":"zcs_tsm",
+                            "msg": "%m",
+                            "method":"%M",
+                            "thread": "%thread"
+                            }
+                        </pattern>
+                    </pattern>
+                </providers>
+            </encoder>
+        </appender>
+    </appender>
+    <logger name="reLogger" level="info" additivity="false">
+        <appender-ref ref="Async-Appender"/>
+    </logger>
+</configuration>
