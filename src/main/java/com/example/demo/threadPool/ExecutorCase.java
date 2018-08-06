@@ -42,6 +42,9 @@ public class ExecutorCase {
         }
     }
 
+    /**
+     * 任务类
+     */
     static class Task implements Callable<String>{
         @Override
         public String call() throws Exception {
