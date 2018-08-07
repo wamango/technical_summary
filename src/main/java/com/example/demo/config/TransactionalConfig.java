@@ -9,7 +9,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.interceptor.*;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -25,7 +24,6 @@ public class TransactionalConfig {
      */
     @Bean("txSource")
     public TransactionAttributeSource transactionAttributeSource(){
-        NameMatchTransactionAttributeSource source = new NameMatchTransactionAttributeSource();
         //只读事务
         RuleBasedTransactionAttribute readOnly = new RuleBasedTransactionAttribute();
         readOnly.setReadOnly(true);
@@ -41,13 +39,26 @@ public class TransactionalConfig {
         paramMap.put("update*",required);
         paramMap.put("insert*",required);
         paramMap.put("*", readOnly);
+        NameMatchTransactionAttributeSource source = new NameMatchTransactionAttributeSource();
         source.setNameMap(paramMap);
         return source;
     }
+
+    /**
+     * 事务拦截
+     * @param tx
+     * @return
+     */
     @Bean("txAdvice")
     public TransactionInterceptor transactionInterceptor(PlatformTransactionManager tx){
         return new TransactionInterceptor(tx,transactionAttributeSource());
     }
+
+    /**
+     * 事务切面
+     * @param txAdvice
+     * @return
+     */
     @Bean
     public AspectJExpressionPointcutAdvisor pointcutAdvisor(TransactionInterceptor txAdvice){
         AspectJExpressionPointcutAdvisor pointcutAdvisor = new AspectJExpressionPointcutAdvisor();

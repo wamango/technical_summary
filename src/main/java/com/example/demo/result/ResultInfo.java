@@ -65,6 +65,14 @@ public class ResultInfo {
         return result(code,message,null);
     }
 
+    /**
+     * 返回结果拼接
+     * @param code
+     * @param message
+     * @param data
+     * @param <T>
+     * @return
+     */
     public static <T>ResponseInfo<T> result(String code,String message,T data){
         ResponseInfo<T> body = new ResponseInfo<>();
         body.setRetCode(code);

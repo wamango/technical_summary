@@ -1,4 +1,7 @@
-package com.example.demo.threadPool;
+package com.example.demo.threadpool;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.*;
 
@@ -9,6 +12,7 @@ import java.util.concurrent.*;
  * @create 2018-07-26 18:18
  **/
 public class ExecutorCase {
+    private static Logger logger = LoggerFactory.getLogger(ExecutorCase.class);
 //    private static Executor exector = Executors.newFixedThreadPool(10);
 
     //
@@ -28,7 +32,7 @@ public class ExecutorCase {
 
 
     private static ExecutorService executor = Executors.newFixedThreadPool(10);
-    public static void main(String[] args) {
+   /* public static void main(String[] args) {
         Future<String> future = executor.submit(new Task());
         System.out.println("do other things");
         try{
@@ -41,17 +45,24 @@ public class ExecutorCase {
             e.printStackTrace();
         }
     }
+*/
 
     /**
      * 任务类添加
      */
     static class Task implements Callable<String>{
+
+        /**
+         * 任务回调方法
+         * @return
+         * @throws Exception
+         */
         @Override
         public String call() throws Exception {
             try{
                 TimeUnit.SECONDS.sleep(2);
             }catch (InterruptedException e){
-                e.printStackTrace();
+                logger.error("回调异常{}",e);
             }
             return "this is future case";
         }

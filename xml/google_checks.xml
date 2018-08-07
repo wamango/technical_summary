@@ -1,0 +1,361 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    Checkstyle configuration that checks the Google coding conventions from Google Java Style
+    that can be found at https://google.github.io/styleguide/javaguide.html.
+
+    Checkstyle is very configurable. Be sure to read the documentation at
+    http://checkstyle.sf.net (or in your downloaded distribution).
+
+    To completely disable a check, just comment it out or delete it from the file.
+
+    Authors: Max Vetrenko, Ruslan Diachenko, Roman Ivanov.
+ -->
+
+<module name = "Checker">
+    <property name="charset" value="UTF-8"/>
+
+    <property name="severity" value="warning"/>
+
+    <property name="fileExtensions" value="java, properties, xml"/>
+    <!-- Checks for whitespace                               -->
+    <!-- See http://checkstyle.sf.net/config_whitespace.html
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+     -->
+    <!-- 文件长度不超过1500行-->
+    <module name="FileLength">
+        <property name="max" value="1500"/>
+    </module>
+
+    <module name="TreeWalker">
+        <!-- 检查外部类型名称是否与文件名对应 -->
+        <module name="OuterTypeFilename"/>
+        <!-- 检查标签内容是否非法 -->
+        <module name="IllegalTokenText">
+            <property name="tokens" value="STRING_LITERAL, CHAR_LITERAL"/>
+            <property name="format"
+                      value="\\u00(09|0(a|A)|0(c|C)|0(d|D)|22|27|5(C|c))|\\(0(10|11|12|14|15|42|47)|134)"/>
+            <property name="message"
+                      value="Consider using special escape sequence instead of octal value or Unicode escaped value."/>
+        </module>
+        <!-- 限制使用Unicode escapes -->
+        <module name="AvoidEscapedUnicodeCharacters">
+            <property name="allowEscapesForControlCharacters" value="true"/>
+            <property name="allowByTailComment" value="true"/>
+            <property name="allowNonPrintableEscapes" value="true"/>
+        </module>
+        <!-- System.out.print/System.out.println -->
+        <module name="Regexp">
+            <property name="format" value="System\.out\.print"/>
+            <property name="illegalPattern" value="true"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message" value="'System.out.print/System.out.println' Prohibition of use"/>
+        </module>
+        <!-- printStackTrace -->
+        <module name="Regexp">
+            <property name="format" value="printStackTrace"/>
+            <property name="illegalPattern" value="true"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message" value="'Exception printStackTrace' Prohibition of use, please log.error"/>
+        </module>
+        <!-- for循环3层 -->
+        <module name="NestedForDepth">
+            <property name="max" value="3"/>
+            <message key="nested.for.depth" value="至多{1,number,integer}层 for，目前{0,number,integer}层."/>
+        </module>
+        <!-- if循环3层 -->
+        <module name="NestedIfDepth">
+            <property name="max" value="3"/>
+            <message key="nested.if.depth" value="if-else嵌套语句个数为 {0,number,integer} (最大允许嵌套语句个数为: {1,number,integer})."/>
+        </module>
+        <!-- 每行不超过150个字-->
+        <module name="LineLength">
+            <property name="max" value="150"/>
+            <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+        </module>
+        <!-- 方法不超过60行 -->
+        <module name="MethodLength">
+            <property name="tokens" value="METHOD_DEF"/>
+            <property name="max" value="60"/>
+        </module>
+        <!-- import avoid * -->
+        <module name="AvoidStarImport"/>
+        <!-- import package unused check -->
+        <module name="UnusedImports"/>
+        <!-- 检查顶级类的接口或枚举是否位于自己的源文件中 -->
+        <module name="OneTopLevelClass"/>
+        <!-- 检查所选语句是否没被换行，例如import包的语句 -->
+        <module name="NoLineWrap"/>
+        <!-- 检查空块，但不验证顺序块 -->
+        <module name="EmptyBlock">
+            <property name="option" value="TEXT"/>
+            <property name="tokens"
+                      value="LITERAL_TRY, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_SWITCH"/>
+        </module>
+        <!-- 检查是否需要大括号，在if lese等场景使用 -->
+        <module name="NeedBraces"/>
+        <!-- 检查{ 和左边的代码是否在同行 -->
+        <module name="LeftCurly"/>
+        <!-- 检查if else for循环等等内的右侧花括号的位置 -->
+        <module name="RightCurly">
+            <property name="id" value="RightCurlySame"/>
+            <property name="tokens"
+                      value="LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE,
+                    LITERAL_DO"/>
+        </module>
+        <!-- 检查if else for循环等等内的右侧花括号的位置 -->
+        <module name="RightCurly">
+            <property name="id" value="RightCurlyAlone"/>
+            <property name="option" value="alone"/>
+            <property name="tokens"
+                      value="CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, STATIC_INIT,
+                    INSTANCE_INIT"/>
+        </module>
+        <!-- 检查分隔符左右两边是否都是空格
+        <module name="WhitespaceAround">
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="allowEmptyLoops" value="true"/>
+            <message key="ws.notFollowed"
+             value="WhitespaceAround: ''{0}'' is not followed by whitespace. Empty blocks may only be represented as '{}' when not part of a multi-block statement (4.1.3)"/>
+            <message key="ws.notPreceded"
+             value="WhitespaceAround: ''{0}'' is not preceded with whitespace."/>
+        </module>
+        -->
+        <!-- 确保每行只有一条语句 -->
+        <module name="OneStatementPerLine"/>
+        <!-- 检查代码段和行中是否有多次变量声明 -->
+        <module name="MultipleVariableDeclarations"/>
+        <!-- 检查数组定义的样式，例如C和java会不同 -->
+        <module name="ArrayTypeStyle"/>
+        <!-- 检测switch语句里是否有默认的clause -->
+        <module name="MissingSwitchDefault"/>
+        <!-- 检查switch是否缺少break、continue、return、throw -->
+        <module name="FallThrough"/>
+        <!-- 检查Long 常量定义时开头是否用L
+        <module name="UpperEll"/>
+         -->
+        <!-- 检查修改符的顺序是否符合java所定标准（public、private等）
+        <module name="ModifierOrder"/>
+         -->
+        <!-- 检查空白行分隔符 -->
+        <module name="EmptyLineSeparator">
+            <property name="allowNoEmptyLineBetweenFields" value="true"/>
+        </module>
+        <!-- 检查带分隔线的换行 -->
+        <module name="SeparatorWrap">
+            <property name="id" value="SeparatorWrapDot"/>
+            <property name="tokens" value="DOT"/>
+            <property name="option" value="nl"/>
+        </module>
+        <!-- 检查带分隔线的换行 -->
+        <module name="SeparatorWrap">
+            <property name="id" value="SeparatorWrapComma"/>
+            <property name="tokens" value="COMMA"/>
+            <property name="option" value="EOL"/>
+        </module>
+        <!-- 检查带分隔线的换行 -->
+        <module name="SeparatorWrap">
+            <!-- ELLIPSIS is EOL until https://github.com/google/styleguide/issues/258 -->
+            <property name="id" value="SeparatorWrapEllipsis"/>
+           <!-- <property name="tokens" value="ELLIPSIS"/>-->
+            <property name="option" value="EOL"/>
+        </module>
+        <!-- 检查带分隔线的换行 -->
+        <module name="SeparatorWrap">
+            <!-- ARRAY_DECLARATOR is EOL until https://github.com/google/styleguide/issues/259 -->
+            <property name="id" value="SeparatorWrapArrayDeclarator"/>
+            <property name="tokens" value="ARRAY_DECLARATOR"/>
+            <property name="option" value="EOL"/>
+        </module>
+        <!-- 检查带分隔线的换行 -->
+        <module name="SeparatorWrap">
+            <property name="id" value="SeparatorWrapMethodRef"/>
+            <property name="option" value="nl"/>
+        </module>
+        <!-- package name -->
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+            <message key="name.invalidPattern"
+                     value="Package name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- 类名(class 或interface) 的检查 -->
+        <module name="TypeName">
+            <message key="name.invalidPattern"
+                     value="Type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- 方法名的检查 -->
+        <module name="MemberName">
+            <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9]*$"/>
+            <message key="name.invalidPattern"
+                     value="Member name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- 方法参数命名校验 -->
+        <module name="ParameterName">
+            <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+            <message key="name.invalidPattern"
+                     value="Parameter name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- Lambda参数命名校验
+        <module name="LambdaParameterName">
+            <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+            <message key="name.invalidPattern"
+                     value="Lambda parameter name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+         -->
+        <!-- Catch参数命名校验 -->
+        <module name="CatchParameterName">
+            <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+            <message key="name.invalidPattern"
+                     value="Catch parameter name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- LocalVariableName命名校验 -->
+        <module name="LocalVariableName">
+            <property name="tokens" value="VARIABLE_DEF"/>
+            <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+            <message key="name.invalidPattern"
+                     value="Local variable name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- ClassTypeParameterName命名校验 -->
+        <module name="ClassTypeParameterName">
+            <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
+            <message key="name.invalidPattern"
+                     value="Class type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- MethodTypeParameterName命名校验 -->
+        <module name="MethodTypeParameterName">
+            <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
+            <message key="name.invalidPattern"
+                     value="Method type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- 检查接口类型参数名称是否符合格式 -->
+        <module name="InterfaceTypeParameterName">
+            <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
+            <message key="name.invalidPattern"
+                     value="Interface type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- 检查是否有定义finalize() -->
+        <module name="NoFinalizer"/>
+        <!-- 检查<>和周围的空格
+        <module name="GenericWhitespace">
+            <message key="ws.followed"
+             value="GenericWhitespace ''{0}'' is followed by whitespace."/>
+            <message key="ws.preceded"
+             value="GenericWhitespace ''{0}'' is preceded with whitespace."/>
+            <message key="ws.illegalFollow"
+             value="GenericWhitespace ''{0}'' should followed by whitespace."/>
+            <message key="ws.notPreceded"
+             value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
+        </module>
+        -->
+        <!-- 检查Java代码的缩进
+        <module name="Indentation">
+            <property name="basicOffset" value="2"/>
+            <property name="braceAdjustment" value="0"/>
+            <property name="caseIndent" value="2"/>
+            <property name="throwsIndent" value="4"/>
+            <property name="lineWrappingIndentation" value="4"/>
+            <property name="arrayInitIndent" value="2"/>
+        </module>
+        -->
+        <!-- 检查Java代码的缩进 -->
+        <module name="AbbreviationAsWordInName">
+            <property name="ignoreFinal" value="false"/>
+            <property name="allowedAbbreviationLength" value="4"/>
+        </module>
+        <!-- 检查是否有不正确的重载方法被组合在一起 -->
+        <module name="OverloadMethodsDeclarationOrder"/>
+        <!-- 检查声明变量与其第一次用的距离 -->
+        <module name="VariableDeclarationUsageDistance"/>
+        <!-- CustomImportOrder
+        <module name="CustomImportOrder">
+            <property name="sortImportsInGroupAlphabetically" value="true"/>
+            <property name="separateLineBetweenGroups" value="true"/>
+            <property name="customImportOrderRules" value="STATIC###THIRD_PARTY_PACKAGE"/>
+        </module>
+        -->
+        <!-- MethodParamPad -->
+        <module name="MethodParamPad"/>
+        <!-- 检查标志前是否有空格 -->
+        <module name="NoWhitespaceBefore">
+            <!--<property name="tokens" value="COMMA, SEMI, POST_INC, POST_DEC, DOT, ELLIPSIS"/>-->
+            <property name="tokens" value="COMMA, SEMI, POST_INC, POST_DEC, DOT"/>
+            <property name="allowLineBreaks" value="true"/>
+        </module>
+        <!-- 检查括号中的填充，检查目标为左括号后与右括号前 -->
+        <module name="ParenPad"/>
+        <!-- OperatorWrap -->
+        <module name="OperatorWrap">
+            <property name="option" value="NL"/>
+            <property name="tokens"
+                      value="BAND, BOR, BSR, BXOR, DIV, EQUAL, GE, GT, LAND, LE, LITERAL_INSTANCEOF, LOR,
+                    LT, MINUS, MOD, NOT_EQUAL, PLUS, QUESTION, SL, SR, STAR "/>
+        </module>
+        <!-- 检查注释的位置 -->
+        <module name="AnnotationLocation">
+            <property name="id" value="AnnotationLocationMostCases"/>
+            <property name="tokens"
+                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
+        </module>
+        <!-- 检查注释的位置 -->
+        <module name="AnnotationLocation">
+            <property name="id" value="AnnotationLocationVariables"/>
+            <property name="tokens" value="VARIABLE_DEF"/>
+            <property name="allowSamelineMultipleAnnotations" value="true"/>
+        </module>
+        <!-- NonEmptyAtclauseDescription
+        <module name="NonEmptyAtclauseDescription"/>
+        -->
+        <!-- JavadocTagContinuationIndentation
+        <module name="JavadocTagContinuationIndentation"/>
+        -->
+        <!-- 检查javadoc摘要句是否包含不推荐的短语
+        <module name="SummaryJavadoc">
+            <property name="forbiddenSummaryFragments"
+                      value="^@return the *|^This method returns |^A [{]@code [a-zA-Z0-9]+[}]( is a )"/>
+        </module>
+        -->
+        <!-- 检查javadoc的段落 -->
+        <module name="JavadocParagraph"/>
+        <!-- 检查java-doc块标签或者标签顺序
+        <module name="AtclauseOrder">
+            <property name="tagOrder" value="@param, @return, @throws, @deprecated"/>
+            <property name="target"
+             value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF, VARIABLE_DEF"/>
+        </module>
+        -->
+        <!-- 检查javadoc的方法或构造函数 -->
+        <module name="JavadocMethod">
+            <property name="scope" value="public"/>
+            <property name="allowMissingParamTags" value="true"/>
+            <property name="allowMissingThrowsTags" value="true"/>
+            <property name="allowMissingReturnTag" value="true"/>
+            <property name="minLineCount" value="2"/>
+            <property name="allowedAnnotations" value="Override, Test"/>
+            <property name="allowThrowsTagsForSubclasses" value="true"/>
+        </module>
+        <!-- 检查方法命名是否符合格式 -->
+        <module name="MethodName">
+            <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9_]*$"/>
+            <message key="name.invalidPattern"
+                     value="Method name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <!-- 检查javadoc块是否可以适应单行，并且不包含at-clause -->
+        <module name="SingleLineJavadoc">
+            <property name="ignoreInlineTags" value="false"/>
+        </module>
+        <!-- 检查空块以及其中变量注释 -->
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="expected"/>
+        </module>
+        <!-- 控制注释和代码之间的缩进
+        <module name="CommentsIndentation"/>
+         -->
+    </module>
+</module>

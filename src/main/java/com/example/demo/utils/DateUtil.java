@@ -1,5 +1,8 @@
 package com.example.demo.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -15,7 +18,7 @@ import java.util.Date;
  * @date 2018年7月31日
  */
 public class DateUtil {
-
+    private static Logger logger = LoggerFactory.getLogger(DateUtil.class);
     public static final String TIME_FORMATTER_BASIC = "yyyy-MM-dd HH:mm:ss";
     public static final String TIME_FORMATTER_SHORT = "yyyyMMddHHmmss";
     public static final String TIME_FORMATTER_SHORT_MINI = "yyyyMMddHHmmssSSS";
@@ -36,8 +39,9 @@ public class DateUtil {
         return sdf.format(date);
     }
 
-    /***
+    /**
      * 把字符串转成指定日期格式
+     *
      * @param strDate
      * @return
      */
@@ -66,7 +70,7 @@ public class DateUtil {
             tsStr = sdf.format(ts);
             return tsStr;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("异常{}", e);
         }
         return null;
     }
@@ -89,6 +93,7 @@ public class DateUtil {
                 return date;
             }
         } catch (Exception e) {
+            logger.error("异常{}", e);
             return null;
         }
         return date;
@@ -125,7 +130,7 @@ public class DateUtil {
             long day = diffTime / nday;
             return day;
         } catch (ParseException e) {
-            e.printStackTrace();
+            logger.error("异常{}", e);
             return null;
         }
     }
@@ -146,7 +151,7 @@ public class DateUtil {
             long diffTime = endDate.getTime() - starDate.getTime();
             return diffTime;
         } catch (ParseException e) {
-            e.printStackTrace();
+            logger.error("异常{}", e);
             return null;
         }
     }
@@ -168,22 +173,19 @@ public class DateUtil {
     /**
      * 获取前/后日期 时间
      *
-     * @param format
-     *            格式
-     * @param day
-     *            前/后日期
-     *            时间
+     * @param format 格式
+     * @param day    前/后日期
+     *               时间
      * @return
      */
-    public static String getDateAfterOrBefore(String format,Date date, int day, int hour,
-                                      int mimute, int sec) {
+    public static String getDateAfterOrBefore(String format, Date date, int day, int hour, int mimute, int sec) {
         Calendar cal = Calendar.getInstance();
         cal.setTime(date);
         cal.add(Calendar.DATE, day);
         cal.add(Calendar.HOUR_OF_DAY, hour);
         cal.add(Calendar.MINUTE, mimute);
         cal.add(Calendar.SECOND, sec);
-        return getFormatDateTime(cal.getTime(),format);
+        return getFormatDateTime(cal.getTime(), format);
     }
 
     /**
@@ -191,7 +193,7 @@ public class DateUtil {
      *
      * @return
      */
-    public static Timestamp getTimestampAfterOrBefore(Date date, int day,String formatter) {
+    public static Timestamp getTimestampAfterOrBefore(Date date, int day, String formatter) {
         Date newDate = getDateAfterOrBefore(date, day);
         DateFormat sdf = new SimpleDateFormat(formatter);
         String newDateStr = sdf.format(newDate);
@@ -213,6 +215,7 @@ public class DateUtil {
             simpleDateFormat.setLenient(false);
             simpleDateFormat.parse(date);
         } catch (ParseException e) {
+            logger.error("异常{}", e);
             convertSuccess = false;
         }
         return convertSuccess;
@@ -220,21 +223,19 @@ public class DateUtil {
 
     /**
      * 比较时间大小
-     * @param date1
-     * @param date2
-     * return  date1>date2 = 1;date1=date2 =0;date1<date2 = -1
      *
+     * @param date1
+     * @param date2 return
      */
-    public static synchronized int compare(Date date1, Date date2)throws Exception {
-        if(date1 == null || date2 == null){
+    public static synchronized int compare(Date date1, Date date2) throws Exception {
+        if (date1 == null || date2 == null) {
             throw new Exception("日期参数不能为空");
         }
         long time1 = date1.getTime();
         long time2 = date2.getTime();
-        if(time1 > time2){
+        if (time1 > time2) {
             return 1;
-        }
-        if(time1 == time2 ){
+        } else if (time1 == time2) {
             return 0;
         }
         return -1;
@@ -243,15 +244,16 @@ public class DateUtil {
 
     /**
      * 当前时间离23:59:59的秒数
+     *
      * @return
      * @throws ParseException
      */
-    public static int getCurrtTimeToZeroTime() throws ParseException{
+    public static int getCurrtTimeToZeroTime() throws ParseException {
         DateFormat df = new SimpleDateFormat("HH:mm:ss");
-        Date endDate=df.parse("23:59:59");
-        String currtDateStr=df.format(new Date());
-        Date currentDate=df.parse(currtDateStr);
-        long interval =(endDate.getTime()-currentDate.getTime())/1000;
+        Date endDate = df.parse("23:59:59");
+        String currtDateStr = df.format(new Date());
+        Date currentDate = df.parse(currtDateStr);
+        long interval = (endDate.getTime() - currentDate.getTime()) / 1000;
         return (int) interval;
     }
 

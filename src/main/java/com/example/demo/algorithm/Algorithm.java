@@ -1,5 +1,6 @@
 package com.example.demo.algorithm;
 
+
 import java.util.*;
 
 /**
@@ -19,7 +20,8 @@ public class Algorithm {
         if (b == 0) {
             return a;
         }
-        int c, d;
+        int c;
+        int d;
         //对两个整数进行异或操作,然后做与操作，左移一位,递归直到没有进位为止
         c = a ^ b;
         d = (a & b) << 1;
@@ -314,6 +316,13 @@ public class Algorithm {
         return state[2][n];
     }
 
+    /**
+     * 有一个n层的建筑。如果一个鸡蛋从第k层及以上落下，它会碎掉。如果从低于这一层的任意层落下，都不会碎。
+     * 现在有两个鸡蛋,找出最少次数（动态规划）
+     * @param eggs
+     * @param floors
+     * @return
+     */
     public static int dropEggs2(int eggs, int floors) {
         // write your code here
         //第一步永远是创建动态规划的备忘录,也叫状态转移矩阵
@@ -369,15 +378,15 @@ public class Algorithm {
     /**
      * 合并两个排序的整数数组A和B变成一个新的数组
      *
-     * @param A
-     * @param B
+     * @param a
+     * @param b
      * @return
      */
-    public static int[] mergeSortedArray(int[] A, int[] B) {
+    public static int[] mergeSortedArray(int[] a, int[] b) {
         //先把两个数组合并成一个数组，然后进行排序
-        int[] ab = new int[A.length + B.length];
-        System.arraycopy(A, 0, ab, 0, A.length);
-        System.arraycopy(B, 0, ab, A.length, B.length);
+        int[] ab = new int[a.length + b.length];
+        System.arraycopy(a, 0, ab, 0, a.length);
+        System.arraycopy(b, 0, ab, a.length, b.length);
         Arrays.sort(ab);
 
         //使用linkList进行处理
@@ -386,7 +395,7 @@ public class Algorithm {
 
     }
 
-    public static void main(String[] args) {
+   /* public static void main(String[] args) {
         //两个整数a,b，不使用+号的情况下，计算这两个数字的和
         System.out.println(aplusb(3, 0));
 
@@ -436,5 +445,5 @@ public class Algorithm {
             System.out.print(mergeSortedArray(A, B)[i] + " ");
         }
 
-    }
+    }*/
 }

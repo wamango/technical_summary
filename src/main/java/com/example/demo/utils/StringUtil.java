@@ -1,6 +1,9 @@
 package com.example.demo.utils;
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.reflect.Field;
 
 /**
@@ -10,6 +13,7 @@ import java.lang.reflect.Field;
  * @create 2018-07-31 17:22
  **/
 public class StringUtil {
+    private static Logger logger = LoggerFactory.getLogger(StringUtil.class);
 
     /**
      *  拼接类中属性的值
@@ -34,7 +38,7 @@ public class StringUtil {
             try {
                 obj = field.get(object);
             } catch (IllegalAccessException e) {
-                e.printStackTrace();
+               logger.error("异常{}",e);
             }
             stringBuilder.append(obj==null?"":obj);
         }
