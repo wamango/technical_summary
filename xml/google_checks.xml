@@ -83,8 +83,9 @@
             <property name="tokens" value="METHOD_DEF"/>
             <property name="max" value="60"/>
         </module>
-        <!-- import avoid * -->
+        <!-- import avoid *
         <module name="AvoidStarImport"/>
+        -->
         <!-- import package unused check -->
         <module name="UnusedImports"/>
         <!-- 检查顶级类的接口或枚举是否位于自己的源文件中 -->
@@ -148,37 +149,40 @@
         <module name="EmptyLineSeparator">
             <property name="allowNoEmptyLineBetweenFields" value="true"/>
         </module>
-        <!-- 检查带分隔线的换行 -->
+        <!-- 检查带分隔线的换行
         <module name="SeparatorWrap">
             <property name="id" value="SeparatorWrapDot"/>
             <property name="tokens" value="DOT"/>
             <property name="option" value="nl"/>
         </module>
-        <!-- 检查带分隔线的换行 -->
+        -->
+        <!-- 检查带分隔线的换行
         <module name="SeparatorWrap">
             <property name="id" value="SeparatorWrapComma"/>
             <property name="tokens" value="COMMA"/>
             <property name="option" value="EOL"/>
         </module>
-        <!-- 检查带分隔线的换行 -->
+        -->
+
+        <!-- 检查带分隔线的换行
         <module name="SeparatorWrap">
-            <!-- ELLIPSIS is EOL until https://github.com/google/styleguide/issues/258 -->
             <property name="id" value="SeparatorWrapEllipsis"/>
-           <!-- <property name="tokens" value="ELLIPSIS"/>-->
             <property name="option" value="EOL"/>
         </module>
-        <!-- 检查带分隔线的换行 -->
+        -->
+        <!-- 检查带分隔线的换行
         <module name="SeparatorWrap">
-            <!-- ARRAY_DECLARATOR is EOL until https://github.com/google/styleguide/issues/259 -->
             <property name="id" value="SeparatorWrapArrayDeclarator"/>
             <property name="tokens" value="ARRAY_DECLARATOR"/>
             <property name="option" value="EOL"/>
         </module>
-        <!-- 检查带分隔线的换行 -->
+        -->
+        <!-- 检查带分隔线的换行
         <module name="SeparatorWrap">
             <property name="id" value="SeparatorWrapMethodRef"/>
             <property name="option" value="nl"/>
         </module>
+        -->
         <!-- package name -->
         <module name="PackageName">
             <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
