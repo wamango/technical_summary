@@ -6,6 +6,7 @@ package com.example.demo.design.strategy;
  * @author dzm
  * @create 2018-08-09 23:35
  **/
+@PriceRegion(max = 10000)
 public class Orgnic implements CalPrice{
 
     /**
