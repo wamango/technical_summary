@@ -19,7 +19,7 @@ public class CalPriceFactory {
     private List<Class<? extends CalPrice>> calPriceList;//策略列表
 
     //根据玩家的总金额产生相应的策略
-    public static CalPrice createCalPrice(Player player) {
+    public  CalPrice createCalPrice(Player player) {
         //在策略列表查找策略
         for (Class<? extends CalPrice> clazz : calPriceList) {
             PriceRegion validRegion = handleAnnotation(clazz);//获取该策略的注解
