@@ -12,6 +12,7 @@ import java.util.List;
  */
 public class CalPriceFactory {
 
+
     private static final String CAL_PRICE_PACKAGE = "com.example.demo.design.strategy";//这里是一个常量，表示我们扫描策略的包
 
     private ClassLoader classLoader = getClass().getClassLoader();
@@ -84,6 +85,7 @@ public class CalPriceFactory {
         try {
             File file = new File(classLoader.getResource(CAL_PRICE_PACKAGE.replace(".", "/")).toURI());
             return file.listFiles(new FileFilter() {
+                @Override
                 public boolean accept(File pathname) {
                     if (pathname.getName().endsWith(".class")) {//我们只扫描class文件
                         return true;

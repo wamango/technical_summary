@@ -16,7 +16,7 @@
             </connectionStrategy>
             <writeBufferSize>16384</writeBufferSize>
             <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
-                <jsonFactoryDecorator class="com.zcs.test.config.MyJsonFactoryDecorator"/>
+                <jsonFactoryDecorator class="com.example.demo.config.MyJsonFactoryDecorator"/>
                 <providers>
                     <timestamp>
                         <pattern>yyyy-MM-dd'T'HH:mm:ss.SSSZZ</pattern>

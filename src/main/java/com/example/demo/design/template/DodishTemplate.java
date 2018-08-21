@@ -8,7 +8,7 @@ public abstract class DodishTemplate {
     /**
      * 做菜的整个过程（公用的可以写在里面）
      */
-    protected void dodish(){
+    public void dodish(){
         start();
         preparation();
         doing();
