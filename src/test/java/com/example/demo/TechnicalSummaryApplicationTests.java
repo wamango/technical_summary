@@ -1,5 +1,6 @@
 package com.example.demo;
 
+import com.example.demo.design.facade.Facade;
 import com.example.demo.design.factory.EncryptFactory;
 import com.example.demo.design.strategy.Player;
 import com.example.demo.design.template.Bouilli;
@@ -54,4 +55,13 @@ public class TechnicalSummaryApplicationTests extends AbstractTransactionalTestN
         dodishTemplate.dodish();
 	}
 
+	/**
+	 *门面模式测试
+	 */
+	@Test
+	private void testFacade(){
+		//可以使用抽象工厂来
+		Facade facade = new Facade();
+		facade.test();
+	}
 }
