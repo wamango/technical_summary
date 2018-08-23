@@ -9,10 +9,11 @@ package com.example.demo.exercise;
 public class MiniDuckSimulator {
 
     public static void main(String[] args) {
-        Duck mallard = new MallardDuck();
-        mallard.setFlyBehavior(new FlyNoWay());
-        mallard.performFly();
-        mallard.setQuackBehavior(new MuteQuack());
-        mallard.performQuack();
+//        Duck mallard = new MallardDuck();
+//        mallard.setFlyBehavior(new FlyNoWay());
+//        mallard.performFly();
+//        mallard.setQuackBehavior(new MuteQuack());
+//        mallard.performQuack();
+
     }
 }
