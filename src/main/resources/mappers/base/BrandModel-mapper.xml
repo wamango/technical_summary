@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.zcs.tsm.mapper.base.BrandModelMapper" >
+
+	<!--插入并返回主键-->
+	<insert id="insertBrandModel" useGeneratedKeys="true" keyProperty="id" parameterType="CardModel">
+		insert into tsm_brand_model
+		(
+	   app_id,
+	   brand_id,
+	   brh_id,
+	   os_type,
+	   model,
+	   model_name,
+	   status,
+	   create_time,
+	   update_time
+		)
+		VALUES
+		(
+		#{appId},
+		#{brandId},
+		#{brhId},
+		#{osType},
+		#{model},
+		#{modelName},
+		#{status},
+		now(),
+		now()
+		)
+	</insert>
+
+	<select id="queryBrandModel" parameterType="BrandModel" resultType="BrandModel">
+		select auto_id,
+	           app_id,
+	           brand_id,
+	           brh_id,
+	           os_type,
+	           model,
+	           model_name,
+	           create_time,
+	           update_time
+		from tsm_brand_model
+		where status = '1'
+		<if test="brandId!=null and brandId!=''">
+			and brand_id = #{brandId}
+		</if>
+		<if test="brhId!=null and brhId!=''">
+			and brh_id = #{brhId}
+		</if>
+		<if test="model!=null and model!=''">
+			and model = #{model}
+		</if>
+		<if test="appId!=null and appId!=''">
+			and app_id = #{appId}
+		</if>
+	</select>
+</mapper>

@@ -169,4 +169,13 @@ public class RedisTools {
     }
 
 
+//    Map<String,String> redisMap = (Map<String,String>) redisTools.getMap(redisKey);
+//    for (Map.Entry<String, String> entry : redisMap.entrySet()) {
+//        logger.info("key:{}", entry.getKey());
+//        logger.info("value:{}", entry.getValue());
+//        if (StringUtils.isEmpty(entry.getValue())) {
+//            continue;
+//        }
+//        redisTools.hset(redisKey, entry.getKey(), entry.getValue(), CacheConstants.VALIDTIME_USER_TOKEN, TimeUnit.MINUTES);
+//    }
 }
