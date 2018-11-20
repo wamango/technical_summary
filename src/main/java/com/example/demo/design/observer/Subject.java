@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 观察者
+ * 目标类
  *
  * @author dzm
  * @create 2018-11-20 15:51
