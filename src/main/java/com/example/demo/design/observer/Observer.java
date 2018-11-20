@@ -1,14 +1,13 @@
 package com.example.demo.design.observer;
 
 /**
- * 观察者
+ * 观察者接口，定义一个更新的方法给那些发生改变时的被通知的对象
  */
 public interface Observer {
+
     /**
-     * 更新
-     * @param temp 温度
-     * @param humidity 湿度
-     * @param pressure 气压
+     * 被通知的方法
+     * @param subject 传入目标对象，可以获取报纸的内容
      */
-    void update(float temp, float humidity, float pressure);
+    public void update(Subject subject);
 }
