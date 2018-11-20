@@ -1,12 +1,14 @@
 package com.example.demo.design.observer;
 
+import java.util.Observable;
+
 /**
  * 具体的目标实现
  *
  * @author dzm
  * @create 2018-11-20 16:06
  **/
-public class NewsPaper extends Subject {
+public class NewsPaper extends Observable {
 
     public NewsPaper(){
         super();
@@ -31,8 +33,9 @@ public class NewsPaper extends Subject {
      */
     public void setContent(String content) {
         this.content = content;
+        this.setChanged();
         //内容有了，说明要出版报纸了，通知所有的读者
-        this.notifyObserver();
+        this.notifyObservers(content);
 
     }
 }

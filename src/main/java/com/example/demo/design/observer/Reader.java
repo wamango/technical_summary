@@ -1,5 +1,8 @@
 package com.example.demo.design.observer;
 
+import java.util.Observable;
+import java.util.Observer;
+
 /**
  * 具体的观察者实现
  *
@@ -21,13 +24,19 @@ public class Reader implements Observer {
         this.name = name;
     }
 
+
     /**
-     * 更新方法
+     * This method is called whenever the observed object is changed. An
+     * application calls an <tt>Observable</tt> object's
+     * <code>notifyObservers</code> method to have all the object's
+     * observers notified of the change.
      *
-     * @param subject 传入目标对象，方便获取相应的目标对象的状态
+     * @param o   the observable object.
+     * @param content an argument passed to the <code>notifyObservers</code>
      */
     @Override
-    public void update(Subject subject) {
-        System.out.println(name+"收到报纸了，阅读它，内容是："+((NewsPaper)subject).getContent());
+    public void update(Observable o, Object content) {
+        System.out.println(name+"收到报纸了，阅读它，推送模式，内容是："+content);
+        System.out.println(name+"收到报纸了，阅读它，拉取模式，内容是："+((NewsPaper)o).getContent());
     }
 }

@@ -11,7 +11,7 @@ public class Client {
 
     public static void main(String[] args) {
         //创建一个目标对象，也就是被观察者
-        NewsPaper subject = new NewsPaper();
+        NewsPaper newsPaper = new NewsPaper();
         //创建阅读者，也就是观察者
         Reader reader1 = new Reader();
         reader1.setName("张一");
@@ -23,11 +23,11 @@ public class Client {
         reader3.setName("张三");
 
         //注册读者
-        subject.attach(reader1);
-        subject.attach(reader2);
-        subject.attach(reader3);
-        subject.detach(reader2);
+        newsPaper.addObserver(reader1);
+        newsPaper.addObserver(reader2);
+        newsPaper.addObserver(reader3);
+//        newsPaper.deleteObserver(reader2);
         //出版报纸
-        subject.setContent("本期内容是观察者模式");
+        newsPaper.setContent("本期内容是观察者模式");
     }
 }
