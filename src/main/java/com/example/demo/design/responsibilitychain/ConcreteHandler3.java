@@ -14,7 +14,7 @@ public class ConcreteHandler3 extends Handler {
     }
 
     @Override
-    protected void handleRequest(Request request) {
+    public void handleRequest(Request request) {
         if (request.getType() == RequestType.TYPE3) {
             System.out.println(request.getName() + " is handle by ConcreteHandler3");
             return;

@@ -14,5 +14,5 @@ public abstract class Handler {
         this.successor = successor;
     }
 
-    protected abstract void handleRequest(Request request);
+    public abstract void handleRequest(Request request);
 }
