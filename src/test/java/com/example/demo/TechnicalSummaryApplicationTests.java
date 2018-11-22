@@ -138,5 +138,6 @@ public class TechnicalSummaryApplicationTests extends AbstractTransactionalTestN
 
 		Request request3 = new Request(RequestType.TYPE3, "request3");
 		handler3.handleRequest(request3);
+
 	}
 }
