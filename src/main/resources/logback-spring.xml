@@ -1,41 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration debug="true" scan="true" scanPeriod="30 seconds">
     <include resource="org/springframework/boot/logging/logback/base.xml"/>
-
-    <!-- 配置ELK -->
-    <!-- LogStash -->
-    <appender name="Async-Appender" class="net.logstash.logback.appender.LoggingEventAsyncDisruptorAppender">
-        <waitStrategyType>sleeping</waitStrategyType>
-        <appender name="Logstash-Appender"
-                  class="net.logstash.logback.appender.LogstashTcpSocketAppender">
-            <destination>172.18.90.41:4567</destination>
-            <connectionStrategy>
-                <roundRobin>
-                    <connectionTTL>5 minutes</connectionTTL>
-                </roundRobin>
-            </connectionStrategy>
-            <writeBufferSize>16384</writeBufferSize>
-            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
-                <jsonFactoryDecorator class="com.example.demo.config.MyJsonFactoryDecorator"/>
-                <providers>
-                    <timestamp>
-                        <pattern>yyyy-MM-dd'T'HH:mm:ss.SSSZZ</pattern>
-                    </timestamp>
-                    <pattern>
-                        <pattern>
-                            {
-                            "project":"zcs_tsm",
-                            "msg": "%m",
-                            "method":"%M",
-                            "thread": "%thread"
-                            }
-                        </pattern>
-                    </pattern>
-                </providers>
-            </encoder>
-        </appender>
+    <property resource="application.properties"/>
+    <!-- 文件切割, 日志保存30天, 最大100M, 日志总大小20G -->
+    <appender name="FILE-Appender" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${log_name}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <maxFileSize>256MB</maxFileSize>
+            <totalSizeCap>20GB</totalSizeCap>
+        </rollingPolicy>
     </appender>
-    <logger name="reLogger" level="info" additivity="false">
-        <appender-ref ref="Async-Appender"/>
-    </logger>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE-Appender" />
+    </root>
 </configuration>

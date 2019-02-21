@@ -3,7 +3,7 @@ package com.example.demo;
 import com.alibaba.fastjson.support.spring.GenericFastJsonRedisSerializer;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
-import org.springframework.cloud.client.SpringCloudApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,7 +13,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
 
 @EnableRetry
-@SpringCloudApplication
+@SpringBootApplication
 @MapperScan("com.example.demo.mapper")
 @EnableScheduling
 public class TechnicalSummaryApplication {

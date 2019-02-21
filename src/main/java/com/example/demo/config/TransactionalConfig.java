@@ -1,7 +1,6 @@
 package com.example.demo.config;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+
 import org.springframework.aop.aspectj.AspectJExpressionPointcutAdvisor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
@@ -9,6 +8,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.interceptor.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,10 +33,12 @@ public class TransactionalConfig {
         //需要支持事务的
         RuleBasedTransactionAttribute required = new RuleBasedTransactionAttribute();
         required.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-        required.setRollbackRules(Lists.newArrayList(new RollbackRuleAttribute(Exception.class)));
+        List<RollbackRuleAttribute> rollbackRules = new ArrayList<>();
+        rollbackRules.add(new RollbackRuleAttribute(Exception.class));
+        required.setRollbackRules(rollbackRules);
         required.setTimeout(10);
 
-        Map<String,TransactionAttribute> paramMap = Maps.newHashMap();
+        Map<String,TransactionAttribute> paramMap = new HashMap<>(8);
         paramMap.put("add*",required);
         paramMap.put("update*",required);
         paramMap.put("insert*",required);

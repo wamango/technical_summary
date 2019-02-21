@@ -14,7 +14,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>1.5.8.RELEASE</version>
+		<version>1.5.11.RELEASE</version>
 		<relativePath/>
 	</parent>
 
@@ -142,11 +142,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<dependency>
-			<groupId>com.zcs</groupId>
-			<artifactId>zcs-message-api</artifactId>
-			<version>0.0.3-SNAPSHOT</version>
-		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>

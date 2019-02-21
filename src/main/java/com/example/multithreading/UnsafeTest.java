@@ -39,14 +39,14 @@ public class UnsafeTest {
         }
     }
 
-    public static void main(String[] args) {
-        //创建实例
-        UnsafeTest test = new UnsafeTest();
-        /**
-         * boolean compareAndSwapInt(Object obj,long offset,long expect,long update)
-         * 比较对象obj中偏移量为offset的变量的值是否与expect相等，相等则使用update值更新，然后返回true，否则返回false
-         */
-        Boolean sucess = unsafe.compareAndSwapInt(test,stateOffset,0,1);
-        System.out.println(sucess);
-    }
+//    public static void main(String[] args) {
+//        //创建实例
+//        UnsafeTest test = new UnsafeTest();
+//        /**
+//         * boolean compareAndSwapInt(Object obj,long offset,long expect,long update)
+//         * 比较对象obj中偏移量为offset的变量的值是否与expect相等，相等则使用update值更新，然后返回true，否则返回false
+//         */
+//        Boolean sucess = unsafe.compareAndSwapInt(test,stateOffset,0,1);
+//        System.out.println(sucess);
+//    }
 }

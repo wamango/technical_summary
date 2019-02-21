@@ -18,43 +18,43 @@ public class Atomic {
     //创建一个countDownLatch实例
     private static CountDownLatch countDownLatch = new CountDownLatch(2);
 
-    public static void main(String[] args) throws InterruptedException{
-        //统计线程one的0的个数
-        Thread threadOne = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                int size = arrayOne.length;
-                for (int i=0;i<size;++i){
-                    if(arrayOne[i].intValue()==0){
-                        //原子性设置原始值+1
-                        atomicLong.incrementAndGet();
-                    }
-                }
-            countDownLatch.countDown();
-            }
-        });
-
-        Thread threadTwo = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                int size = arrayTwo.length;
-                for (int i=0;i<size;++i){
-                    if(arrayTwo[i].intValue()==0){
-                        //原子性设置原始值+1
-                        atomicLong.incrementAndGet();
-                    }
-                }
-                countDownLatch.countDown();
-            }
-        });
-        //启动线程
-        threadOne.start();
-        threadTwo.start();
-
-        //等待线程执行完毕
-        countDownLatch.await();
-//        threadOne.join();
-//        threadTwo.join();
-        System.out.println("count 0:"+atomicLong.get());
-    }
+//    public static void main(String[] args) throws InterruptedException{
+//        //统计线程one的0的个数
+//        Thread threadOne = new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                int size = arrayOne.length;
+//                for (int i=0;i<size;++i){
+//                    if(arrayOne[i].intValue()==0){
+//                        //原子性设置原始值+1
+//                        atomicLong.incrementAndGet();
+//                    }
+//                }
+//            countDownLatch.countDown();
+//            }
+//        });
+//
+//        Thread threadTwo = new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                int size = arrayTwo.length;
+//                for (int i=0;i<size;++i){
+//                    if(arrayTwo[i].intValue()==0){
+//                        //原子性设置原始值+1
+//                        atomicLong.incrementAndGet();
+//                    }
+//                }
+//                countDownLatch.countDown();
+//            }
+//        });
+//        //启动线程
+//        threadOne.start();
+//        threadTwo.start();
+//
+//        //等待线程执行完毕
+//        countDownLatch.await();
+////        threadOne.join();
+////        threadTwo.join();
+//        System.out.println("count 0:"+atomicLong.get());
+//    }
 }

@@ -31,28 +31,28 @@ public class ThreadTest {
         }
     }
 
-    public static void main(String[] args) {
-        //创建线程
-        MyThread myThread = new MyThread();
-        //启动线程
-        myThread.start();
-
-        RunableTask runableTask = new RunableTask();
-        new Thread(runableTask).start();
-        new Thread(runableTask).start();
-
-        //创建异步线程
-        FutureTask<String> futureTask = new FutureTask<String>(new CallerTask());
-        //启动线程
-        new Thread(futureTask).start();
-        try{
-            //等待任务执行完毕，并返回结果
-            String result = futureTask.get();
-            System.out.println(result);
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-    }
+//    public static void main(String[] args) {
+//        //创建线程
+//        MyThread myThread = new MyThread();
+//        //启动线程
+//        myThread.start();
+//
+//        RunableTask runableTask = new RunableTask();
+//        new Thread(runableTask).start();
+//        new Thread(runableTask).start();
+//
+//        //创建异步线程
+//        FutureTask<String> futureTask = new FutureTask<String>(new CallerTask());
+//        //启动线程
+//        new Thread(futureTask).start();
+//        try{
+//            //等待任务执行完毕，并返回结果
+//            String result = futureTask.get();
+//            System.out.println(result);
+//        }catch (Exception e){
+//            e.printStackTrace();
+//        }
+//    }
 
 
     public static class RunableTask implements Runnable{
