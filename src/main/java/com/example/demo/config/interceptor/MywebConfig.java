@@ -7,7 +7,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
 
 /**
- * 拦截器类
+ * 拦截器配置类
  * @author dzm
  * @create 2019-02-21 11:46
  **/
@@ -24,7 +24,7 @@ public class MywebConfig extends WebMvcConfigurerAdapter {
     // 这个方法用来注册拦截器，我们自己写好的拦截器需要通过这里添加注册才能生效
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(myInterceptor).addPathPatterns("/**");
+        registry.addInterceptor(myInterceptor).addPathPatterns("/test/**");
     }
 
 
