@@ -158,6 +158,13 @@
 			<artifactId>commons-collections4</artifactId>
 			<version>4.1</version>
 		</dependency>
+
+		<!--热部署，自动重启-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<optional>true</optional>
+		</dependency>
 	</dependencies>
 
 	<dependencyManagement>
@@ -177,6 +184,9 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<fork>true</fork>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
