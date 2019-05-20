@@ -1,7 +1,5 @@
 package com.example.demo.exercise;
 
-import java.util.ArrayList;
-
 /**
  * 测试类
  *
@@ -10,26 +8,15 @@ import java.util.ArrayList;
  **/
 public class Test {
     public static void main(String[] args) {
-        ArrayList<Common>  allStudents = new ArrayList<>();
-        ArrayList<Common>  boyStudents = new ArrayList<>();
-        for (int i = 0; i < 10 ; i++) {
-            Common  bean = new Common(i,"name is "+i,"address is "+i);
-            allStudents.add(bean);
+        String[] strings = {"1","2"};
+      printArray(strings);
 
+    }
+
+    public static <E> void printArray(E[] inputArray){
+        for(E e : inputArray){
+            System.out.printf("%s",e);
         }
-
-
-        for (int i = 0; i < 5 ; i++) {
-            Common  bean = new Common(i,"name is "+i,"address is "+i);
-            boyStudents.add(bean);
-
-        }
-
-        System.out.println("allStudents.size()------before-------------->"+allStudents.size());
-        System.out.println("remove result : "+allStudents.removeAll(boyStudents));
-        System.out.println("allStudents.size()-------after-------------->"+allStudents.size());
-
-
     }
 
 }
