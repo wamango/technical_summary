@@ -2,8 +2,6 @@ package com.example.demo.model;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.zcsmart.enums.InternationalEnum;
-import com.zcsmart.web.interceptor.AppRequest;
 import lombok.Data;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.math.NumberUtils;
