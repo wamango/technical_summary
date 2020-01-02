@@ -232,46 +232,6 @@
 		</repository>
 	</repositories>
 
-	<!-- Report mvn:clean compile site -->
-	<reporting>
-		<plugins>
-			<!-- FindBugs -->
-			<plugin>
-				<groupId>org.codehaus.mojo</groupId>
-				<artifactId>findbugs-maven-plugin</artifactId>
-				<version>3.0.5</version>
-				<configuration>
-					<xmlOutput>true</xmlOutput>
-					<xmlOutputDirectory>target/site</xmlOutputDirectory>
-					<excludeFilterFile>${basedir}/xml/findbugs-exclude.xml</excludeFilterFile>
-				</configuration>
-			</plugin>
-
-			<!-- PMD -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-pmd-plugin</artifactId>
-				<version>3.8</version>
-				<configuration>
-					<linkXRef>true</linkXRef>
-					<sourceEncoding>UTF-8</sourceEncoding>
-					<outputDirectory>target/site</outputDirectory>
-					<targetDirectory>target/site</targetDirectory>
-				</configuration>
-			</plugin>
-
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-checkstyle-plugin</artifactId>
-				<version>3.0.0</version>
-				<configuration>
-					<encoding>UTF-8</encoding>
-					<configLocation>xml/google_checks.xml</configLocation>
-				</configuration>
-			</plugin>
-
-		</plugins>
-	</reporting>
 
 
 </project>
