@@ -22,10 +22,13 @@ public class FTPUtil {
 
     @Value("${ftp.username}")
     private  String username;
+
     @Value("${ftp.password}")
     private  String password;
+
     @Value("${ftp.host}")
     private  String host;
+
     private static FTPClient ftp;
 
     private  static FTPClient getFTPClient(String host, String username, String password)throws IOException{
