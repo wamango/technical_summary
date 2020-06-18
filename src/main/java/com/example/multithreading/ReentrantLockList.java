@@ -48,23 +48,23 @@ public class ReentrantLockList {
         }
     }
 
-    public static void main(String[] args) {
-        ReentrantLockList reentrantLockList = new ReentrantLockList();
-        Executor es = new ThreadPoolExecutor(3, 3,
-                0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>(),new ThreadFactoryBuilder().setNameFormat("thread-call-runner-%d").build());
-        for(int i=0;i<3;i++){
-            es.execute(new Runnable() {
-                @Override
-                public void run() {
-                    reentrantLockList.add(Thread.currentThread()+"1");
-                    System.out.println(Thread.currentThread()+"正在执行");
-                }
-            });
-        }
-        reentrantLockList.array.stream().forEach(string->{
-            System.out.println(string);
-        });
-    }
+//    public static void main(String[] args) {
+//        ReentrantLockList reentrantLockList = new ReentrantLockList();
+//        Executor es = new ThreadPoolExecutor(3, 3,
+//                0L, TimeUnit.MILLISECONDS,
+//                new LinkedBlockingQueue<Runnable>(),new ThreadFactoryBuilder().setNameFormat("thread-call-runner-%d").build());
+//        for(int i=0;i<3;i++){
+//            es.execute(new Runnable() {
+//                @Override
+//                public void run() {
+//                    reentrantLockList.add(Thread.currentThread()+"1");
+//                    System.out.println(Thread.currentThread()+"正在执行");
+//                }
+//            });
+//        }
+//        reentrantLockList.array.stream().forEach(string->{
+//            System.out.println(string);
+//        });
+//    }
 
 }
