@@ -3,7 +3,6 @@ package com.example.demo.web;
 import com.example.demo.domain.base.Data;
 import com.example.demo.ftp.FTPUtil;
 import com.example.demo.utils.CSVUtil;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
