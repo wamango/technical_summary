@@ -2,6 +2,10 @@ package com.example.demo.domain.base;
 
 
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
+
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Data {
         @Getter

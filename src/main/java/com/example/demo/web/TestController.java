@@ -4,6 +4,8 @@ import com.example.demo.domain.base.Data;
 import com.example.demo.ftp.FTPUtil;
 import com.example.demo.utils.CSVUtil;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockMultipartFile;
@@ -21,6 +23,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -98,7 +101,7 @@ public class TestController {
 
     private static final ThreadLocal<Integer> currentUser = ThreadLocal.withInitial(() -> null);
     @GetMapping("/threadLocal/wrong")
-    public Map wrong(@RequestParam("userId") Integer userId) {
+    public Map threadLocalWrong(@RequestParam("userId") Integer userId) {
         //设置用户信息之前先查询一次ThreadLocal中的用户信息
         String before  = Thread.currentThread().getName() + ":" + currentUser.get();
         //设置用户信息到ThreadLocal
@@ -132,7 +135,7 @@ public class TestController {
     }
 
     @GetMapping("/concurrentHashMap/wrong")
-    public String wrong() throws InterruptedException {
+    public String concurrentHashMapWrong() throws InterruptedException {
         ConcurrentHashMap<String, Long> concurrentHashMap = getData(ITEM_COUNT - 100);
         //初始900个元素
         log.info("init size:{}", concurrentHashMap.size());
@@ -292,4 +295,115 @@ public class TestController {
         IntStream.rangeClosed(1, count).parallel().forEach(i -> new Data().wrong());
         return Data.getCounter();
     }
+
+
+    private List<Integer> data = new ArrayList<>();
+
+    //不涉及共享资源的慢方法
+    private void slow() {
+        try {
+            TimeUnit.MILLISECONDS.sleep(10);
+        } catch (InterruptedException e) {
+        }
+    }
+
+    //错误的加锁方法
+    @GetMapping("/lock/wrong")
+    public int lockWrong() {
+        long begin = System.currentTimeMillis();
+        IntStream.rangeClosed(1, 1000).parallel().forEach(i -> {
+            //加锁粒度太粗了
+            synchronized (this) {
+                slow();
+                data.add(i);
+            }
+        });
+        log.info("took:{}", System.currentTimeMillis() - begin);
+        return data.size();
+    }
+
+    //正确的加锁方法
+    @GetMapping("/lock/right")
+    public int lockRight() {
+        long begin = System.currentTimeMillis();
+        IntStream.rangeClosed(1, 1000).parallel().forEach(i -> {
+            slow();
+            //只对List加锁
+            synchronized (data) {
+                data.add(i);
+            }
+        });
+        log.info("took:{}", System.currentTimeMillis() - begin);
+        return data.size();
+    }
+
+    @lombok.Data
+    @RequiredArgsConstructor
+    static class Item {
+        final String name; //商品名
+        int remaining = 1000;
+        //库存剩余
+        @ToString.Exclude
+        ReentrantLock lock = new ReentrantLock();
+    }
+
+    static Map<String,Item> items = new HashMap<>(10);
+    static {
+        for(int i=0;i<10;i++){
+            Item item = new Item("item"+i);
+            items.put(item.getName(),item);
+        }
+    }
+
+    private List<Item> createCart() {
+        return IntStream.rangeClosed(1, 3)
+                .mapToObj(i -> "item" + ThreadLocalRandom.current().nextInt(items.size()))
+                .map(name -> items.get(name)).collect(Collectors.toList());
+    }
+
+    private boolean createOrder(List<Item> order) {
+        //存放所有获得的锁
+        List<ReentrantLock> locks = new ArrayList<>();
+
+        for (Item item : order) {
+            try {
+                //获得锁10秒超时
+                if (item.lock.tryLock(10, TimeUnit.SECONDS)) {
+                    locks.add(item.lock);
+                } else {
+                    locks.forEach(ReentrantLock::unlock);
+                    return false;
+                }
+            } catch (InterruptedException e) {
+            }
+        }
+        //锁全部拿到之后执行扣减库存业务逻辑
+        try {
+            order.forEach(item -> item.remaining--);
+        } finally {
+            locks.forEach(ReentrantLock::unlock);
+        }
+        return true;
+    }
+
+
+    @GetMapping("/deadlock/wrong")
+    public long deadlockWrong() {
+        long begin = System.currentTimeMillis();
+        //并发进行100次下单操作，统计成功次数
+        long success = IntStream.rangeClosed(1, 100).parallel()
+                .mapToObj(i -> {
+                    List<Item> cart = createCart();
+                    return createOrder(cart);
+                })
+                .filter(result -> result)
+                .count();
+        log.info("success:{} totalRemaining:{} took:{}ms items:{}",
+                success,
+                items.entrySet().stream().map(item -> item.getValue().remaining).reduce(0, Integer::sum),
+                System.currentTimeMillis() - begin,
+                items);
+        return success;
+    }
+
 }
