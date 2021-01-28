@@ -3,6 +3,7 @@ package com.example.demo.web;
 import com.example.demo.domain.base.Data;
 import com.example.demo.ftp.FTPUtil;
 import com.example.demo.utils.CSVUtil;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
@@ -22,6 +23,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
@@ -406,4 +408,67 @@ public class TestController {
         return success;
     }
 
+
+    @GetMapping("/deadlock/right")
+    public long deadlockRight() {
+        long begin = System.currentTimeMillis();
+        long success = IntStream.rangeClosed(1, 100).parallel()
+                .mapToObj(i -> {
+                    List<Item> cart = createCart().stream()
+                            .sorted(Comparator.comparing(Item::getName))
+                            .collect(Collectors.toList());
+                    return createOrder(cart);
+                })
+                .filter(result -> result)
+                .count();
+        log.info("success:{} totalRemaining:{} took:{}ms items:{}",
+                success,
+                items.entrySet().stream().map(item -> item.getValue().remaining).reduce(0, Integer::sum),
+                System.currentTimeMillis() - begin,
+                items);
+        return success;
+    }
+
+
+    @GetMapping("right")
+    public int right() throws InterruptedException {
+        //使用一个计数器跟踪完成的任务数
+        AtomicInteger atomicInteger = new AtomicInteger();
+        //创建一个具有2个核心线程、5个最大线程，使用容量为10的ArrayBlockingQueue阻塞队列作为工作队列的线程池，使用默认的AbortPolicy拒绝策略
+        ThreadPoolExecutor threadPool = new ThreadPoolExecutor(
+                2, 5,
+                5, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(10),
+                new ThreadFactoryBuilder().setNameFormat("demo-threadpool-%d").build(),
+                new ThreadPoolExecutor.AbortPolicy());
+
+//        printStats(threadPool);
+        //每隔1秒提交一次，一共提交20次任务
+        IntStream.rangeClosed(1, 20).forEach(i -> {
+            try {
+                TimeUnit.SECONDS.sleep(1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            int id = atomicInteger.incrementAndGet();
+            try {
+                threadPool.submit(() -> {
+                    log.info("{} started", id);
+                    //每个任务耗时10秒
+                    try {
+                        TimeUnit.SECONDS.sleep(10);
+                    } catch (InterruptedException e) {
+                    }
+                    log.info("{} finished", id);
+                });
+            } catch (Exception ex) {
+                //提交出现异常的话，打印出错信息并为计数器减一
+                log.error("error submitting task {}", id, ex);
+                atomicInteger.decrementAndGet();
+            }
+        });
+
+        TimeUnit.SECONDS.sleep(60);
+        return atomicInteger.intValue();
+    }
 }

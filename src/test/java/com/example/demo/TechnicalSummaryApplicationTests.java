@@ -1,5 +1,7 @@
 package com.example.demo;
 
+import com.alibaba.fastjson.JSON;
+import com.example.demo.ddd.*;
 import com.example.demo.design.decorator.*;
 import com.example.demo.design.facade.Facade;
 import com.example.demo.design.factory.EncryptFactory;
@@ -10,6 +12,7 @@ import com.example.demo.design.strategy.Player;
 import com.example.demo.design.template.Bouilli;
 import com.example.demo.design.template.DodishTemplate;
 import com.example.demo.design.template.EggsWithTomato;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.testng.AbstractTransactionalTestNGSpringContextTests;
@@ -17,6 +20,7 @@ import org.testng.annotations.Test;
 
 
 @SpringBootTest
+@Slf4j
 public class TechnicalSummaryApplicationTests extends AbstractTransactionalTestNGSpringContextTests {
 	@Autowired
 	private EncryptFactory encryptFactory;
@@ -138,6 +142,19 @@ public class TechnicalSummaryApplicationTests extends AbstractTransactionalTestN
 
 		Request request3 = new Request(RequestType.TYPE3, "request3");
 		handler3.handleRequest(request3);
+
+	}
+
+	@Test
+	private void testDtoAssembler(){
+		User user = new User("13018065863","test123");
+		Basic basic = new Basic("1");
+		UserDTO userDTO = DtoAssembler.INSTANCE.toDTO(user,basic);
+		log.info("userDTO result:{}", JSON.toJSONString(userDTO));
+
+//		BasicDTO basicDTO = new BasicDTO("1");
+//		Basic basic = DtoAssembler.INSTANCE.toEntity(basicDTO);
+//		log.info("Basic result:{}", JSON.toJSONString(basic));
 
 	}
 }

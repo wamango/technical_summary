@@ -1,4 +1,4 @@
-package com.zcs.test.result;
+package com.example.demo.result;
 
 import com.example.demo.result.ResponseInfo;
 
