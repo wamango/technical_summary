@@ -4,6 +4,14 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
+/**
+* create by dengzhiming at 2021/5/19 9:25 上午
+* description: 
+* @return
+* @param 
+* @param 
+* @param 
+*/
 @Mapper
 public interface DtoAssembler {
 
