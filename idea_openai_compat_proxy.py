@@ -498,20 +498,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         self.send_sse_headers()
-        sent_stop = False
+        sent_stop_chunk = False
+        sent_done_marker = False
         try:
             for data in iter_sse_data_lines(upstream):
                 if data == "[DONE]":
-                    sent_stop = True
-                    self.write_sse_data(
-                        openai_chunk(
-                            chunk_id=chunk_id,
-                            model=model,
-                            delta={},
-                            finish_reason="stop",
+                    if not sent_stop_chunk:
+                        self.write_sse_data(
+                            openai_chunk(
+                                chunk_id=chunk_id,
+                                model=model,
+                                delta={},
+                                finish_reason="stop",
+                            )
                         )
-                    )
+                        sent_stop_chunk = True
                     self.write_sse_data("[DONE]")
+                    sent_done_marker = True
                     break
 
                 try:
@@ -535,10 +538,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 normalized_chunks = normalize_stream_event(event, chunk_id=chunk_id, model=model)
                 for chunk in normalized_chunks:
                     if is_done_event(chunk):
-                        sent_stop = True
+                        sent_stop_chunk = True
                     self.write_sse_data(chunk)
 
-            if not sent_stop:
+            if not sent_stop_chunk:
                 self.write_sse_data(
                     openai_chunk(
                         chunk_id=chunk_id,
@@ -547,6 +550,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                         finish_reason="stop",
                     )
                 )
+                sent_stop_chunk = True
+
+            if not sent_done_marker:
                 self.write_sse_data("[DONE]")
         finally:
             try:
