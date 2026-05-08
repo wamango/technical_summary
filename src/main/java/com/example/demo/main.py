@@ -14,7 +14,164 @@ app = FastAPI(title="OpenAI Proxy for IDEA - Debug V2.3", version="2.3.0")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://10.10.55.244:9997")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-yE7cO7oR9nF2d")
 
+# IDEA 连续对话会不断携带历史消息和代码上下文。这里在代理层做一次保守裁剪，
+# 避免本地模型后端报 prompt length > max_model_len。
+CONTEXT_TRIM_ENABLED = os.getenv("CONTEXT_TRIM_ENABLED", "true").lower() != "false"
+MAX_PROMPT_TOKENS = int(os.getenv("MAX_PROMPT_TOKENS", "9000"))
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
+MAX_SINGLE_MESSAGE_TOKENS = int(os.getenv("MAX_SINGLE_MESSAGE_TOKENS", "3000"))
+MAX_SYSTEM_MESSAGE_TOKENS = int(os.getenv("MAX_SYSTEM_MESSAGE_TOKENS", "1800"))
+MAX_COMPLETION_TOKENS = int(os.getenv("MAX_COMPLETION_TOKENS", "2048"))
+
 print("🚀 IDEA Debug Proxy V2.3 Started")
+
+
+def estimate_text_tokens(text: str) -> int:
+    """Rough token estimator for mixed code/English/Chinese text."""
+    if not text:
+        return 0
+    ascii_count = sum(1 for char in text if ord(char) < 128)
+    non_ascii_count = len(text) - ascii_count
+    return max(1, int(ascii_count / 4 + non_ascii_count / 1.5))
+
+
+def estimate_value_tokens(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        return estimate_text_tokens(value)
+    return estimate_text_tokens(json.dumps(value, ensure_ascii=False))
+
+
+def estimate_message_tokens(message: Dict[str, Any]) -> int:
+    # ChatML-like overhead. It is approximate, but intentionally conservative.
+    return (
+        8
+        + estimate_value_tokens(message.get("role"))
+        + estimate_value_tokens(message.get("name"))
+        + estimate_value_tokens(message.get("content"))
+    )
+
+
+def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
+    return 4 + sum(estimate_message_tokens(message) for message in messages)
+
+
+def trim_text_to_tokens(text: str, max_tokens: int, keep: str = "end") -> str:
+    if estimate_text_tokens(text) <= max_tokens:
+        return text
+
+    notice = "\n\n[代理提示：前面内容过长，已自动截断以避免超过本地模型上下文。]\n\n"
+    if keep == "start":
+        notice = "\n\n[代理提示：后面内容过长，已自动截断以避免超过本地模型上下文。]\n\n"
+
+    available_tokens = max_tokens - estimate_text_tokens(notice)
+    if available_tokens <= 0:
+        return ""
+
+    low, high = 0, len(text)
+    best = ""
+    while low <= high:
+        mid = (low + high) // 2
+        candidate = text[:mid] if keep == "start" else text[-mid:]
+        if estimate_text_tokens(candidate) <= available_tokens:
+            best = candidate
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    return f"{best}{notice}" if keep == "start" else f"{notice}{best}"
+
+
+def trim_message_to_tokens(
+    message: Dict[str, Any],
+    max_tokens: int,
+    keep: str = "end",
+) -> Dict[str, Any]:
+    trimmed = dict(message)
+    content = trimmed.get("content")
+    role_overhead = 8 + estimate_value_tokens(trimmed.get("role")) + estimate_value_tokens(trimmed.get("name"))
+    content_budget = max(0, max_tokens - role_overhead)
+
+    if isinstance(content, str):
+        trimmed["content"] = trim_text_to_tokens(content, content_budget, keep)
+    elif content is not None and estimate_value_tokens(content) > content_budget:
+        # 本地代码模型一般只需要文本；复杂 content 过长时转成文本再裁剪。
+        trimmed["content"] = trim_text_to_tokens(extract_text(content), content_budget, keep)
+    return trimmed
+
+
+def cap_completion_tokens(body: Dict[str, Any], request_id: str) -> None:
+    for key in ("max_tokens", "max_completion_tokens"):
+        value = body.get(key)
+        if isinstance(value, int) and value > MAX_COMPLETION_TOKENS:
+            print(f"[{request_id}] Cap {key}: {value} -> {MAX_COMPLETION_TOKENS}")
+            body[key] = MAX_COMPLETION_TOKENS
+
+
+def trim_messages_for_local_model(body: Dict[str, Any], request_id: str) -> None:
+    if not CONTEXT_TRIM_ENABLED:
+        return
+
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return
+
+    normalized_messages = [message for message in messages if isinstance(message, dict)]
+    if not normalized_messages:
+        return
+
+    original_count = len(normalized_messages)
+    original_tokens = estimate_messages_tokens(normalized_messages)
+
+    system_messages = [
+        trim_message_to_tokens(message, MAX_SYSTEM_MESSAGE_TOKENS, keep="start")
+        for message in normalized_messages
+        if message.get("role") in {"system", "developer"}
+    ][:1]
+
+    conversation_messages = [
+        trim_message_to_tokens(message, MAX_SINGLE_MESSAGE_TOKENS, keep="end")
+        for message in normalized_messages
+        if message.get("role") not in {"system", "developer"}
+    ]
+
+    if MAX_HISTORY_MESSAGES > 0 and len(conversation_messages) > MAX_HISTORY_MESSAGES:
+        dropped = len(conversation_messages) - MAX_HISTORY_MESSAGES
+        print(f"[{request_id}] Drop old history messages: {dropped}")
+        conversation_messages = conversation_messages[-MAX_HISTORY_MESSAGES:]
+
+    planned_messages = system_messages + conversation_messages
+    while estimate_messages_tokens(planned_messages) > MAX_PROMPT_TOKENS and len(conversation_messages) > 1:
+        dropped_message = conversation_messages.pop(0)
+        print(
+            f"[{request_id}] Drop oldest message to fit context: "
+            f"role={dropped_message.get('role')}"
+        )
+        planned_messages = system_messages + conversation_messages
+
+    if estimate_messages_tokens(planned_messages) > MAX_PROMPT_TOKENS and conversation_messages:
+        prefix_messages = system_messages + conversation_messages[:-1]
+        latest_budget = MAX_PROMPT_TOKENS - estimate_messages_tokens(prefix_messages) - 16
+        latest_budget = max(256, latest_budget)
+        conversation_messages[-1] = trim_message_to_tokens(conversation_messages[-1], latest_budget, keep="end")
+        planned_messages = system_messages + conversation_messages
+
+    if estimate_messages_tokens(planned_messages) > MAX_PROMPT_TOKENS and system_messages:
+        conversation_tokens = estimate_messages_tokens(conversation_messages)
+        system_budget = MAX_PROMPT_TOKENS - conversation_tokens - 16
+        system_budget = max(128, system_budget)
+        system_messages[0] = trim_message_to_tokens(system_messages[0], system_budget, keep="start")
+        planned_messages = system_messages + conversation_messages
+
+    trimmed_tokens = estimate_messages_tokens(planned_messages)
+    if original_count != len(planned_messages) or original_tokens != trimmed_tokens:
+        print(
+            f"[{request_id}] Context trim: messages {original_count}->{len(planned_messages)}, "
+            f"estimated tokens {original_tokens}->{trimmed_tokens}, limit={MAX_PROMPT_TOKENS}"
+        )
+
+    body["messages"] = planned_messages
 
 
 def make_stream_chunk(
@@ -179,6 +336,8 @@ async def chat_completions(request: Request):
         body.pop("tools", None)
         body.pop("tool_choice", None)
         body.pop("parallel_tool_calls", None)
+        trim_messages_for_local_model(body, request_id)
+        cap_completion_tokens(body, request_id)
 
         headers = {
             "Authorization": f"Bearer {OPENAI_API_KEY}",
