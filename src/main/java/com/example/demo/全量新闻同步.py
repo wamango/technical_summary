@@ -16,60 +16,47 @@ tongtech.com 新闻全量同步脚本
 依赖安装：
     pip install requests beautifulsoup4 lxml pymysql
 
-数据库配置默认复用同目录下“新闻.py”的 MYSQL_CONFIG，也支持通过环境变量覆盖：
+数据库配置在本脚本内维护，也支持通过环境变量覆盖：
 NEWS_DB_HOST、NEWS_DB_PORT、NEWS_DB_USER、NEWS_DB_PASSWORD、NEWS_DB_NAME。
 """
 
 import argparse
 import hashlib
-import importlib.util
 import os
 import re
 import sys
 import time
-import types
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from urllib.parse import urljoin
 
-
-CURRENT_DIR = Path(__file__).resolve().parent
-LEGACY_SCRIPT = CURRENT_DIR / "新闻.py"
-
-
-def load_legacy_script():
-    stub_pymysql = importlib.util.find_spec("pymysql") is None
-    if stub_pymysql:
-        sys.modules["pymysql"] = types.ModuleType("pymysql")
-
-    spec = importlib.util.spec_from_file_location("tongtech_legacy_news", str(LEGACY_SCRIPT))
-    if not spec or not spec.loader:
-        raise RuntimeError(f"无法加载原始脚本: {LEGACY_SCRIPT}")
-
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "缺少原新闻脚本依赖，请先安装: pip install requests beautifulsoup4 lxml pymysql"
-        ) from exc
-    else:
-        return module
-    finally:
-        if stub_pymysql:
-            sys.modules.pop("pymysql", None)
+import requests
+from bs4 import BeautifulSoup
 
 
-legacy = load_legacy_script()
+BASE_URL = "https://www.tongtech.com"
+MYSQL_CONFIG = {
+    "host": "10.10.80.52",
+    "port": 3306,
+    "user": "root",
+    "password": "Golden!@#dftoms",
+    "database": "tongframework_dev",
+    "charset": "utf8mb4",
+}
 
-BASE_URL = legacy.BASE_URL
-CREATE_BY = legacy.CREATE_BY
-SECTION_ID = legacy.SECTION_ID
-CONTEXT_PUBLISHED = legacy.CONTEXT_PUBLISHED
-CONTEXT_AUTHOR = legacy.CONTEXT_AUTHOR
-ENCLOSURE = legacy.ENCLOSURE
+CREATE_BY = "1242684364872761344"
+SECTION_ID = "26e1ac838e2241e6aec69d79fcaa745a"
+CONTEXT_PUBLISHED = "1"
+CONTEXT_AUTHOR = "超级管理员"
+ENCLOSURE = "[]"
 CONTEXT_SOURCE = "东方通官网"
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/91.0.4472.124 Safari/537.36"
+    )
+}
 
 DEFAULT_ACTIVE_STATUS = os.getenv("NEWS_ACTIVE_STATUS", "0")
 DEFAULT_DELETE_STATUS = os.getenv("NEWS_DELETE_STATUS", "1")
@@ -82,8 +69,19 @@ def md5(s: str) -> str:
     return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 
+def get_soup(url: str) -> Optional[BeautifulSoup]:
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding
+        return BeautifulSoup(resp.text, "lxml")
+    except Exception as exc:
+        print(f"请求失败: {url}, 错误: {exc}")
+        return None
+
+
 def build_mysql_config() -> Dict[str, object]:
-    config = dict(legacy.MYSQL_CONFIG)
+    config = dict(MYSQL_CONFIG)
     config["host"] = os.getenv("NEWS_DB_HOST", str(config.get("host", "")))
     config["port"] = int(os.getenv("NEWS_DB_PORT", str(config.get("port", 3306))))
     config["user"] = os.getenv("NEWS_DB_USER", str(config.get("user", "")))
@@ -106,10 +104,69 @@ def extract_news_date(pub_date: str) -> str:
     return match.group(1) if match else ""
 
 
+def normalize_rich_text(html_content: str) -> str:
+    if not html_content:
+        return "<div></div>"
+
+    soup = BeautifulSoup(html_content, "lxml")
+    neirongxq = soup.find("div", class_="neirongxq") or soup
+
+    for p in neirongxq.find_all("p"):
+        style = p.get("style", "")
+        base_style = (
+            "box-sizing: border-box; margin: 0px; padding: 0px; font-size: 16px; "
+            "white-space: normal; color: #222222; line-height: 1.75;"
+        )
+        if "text-align:justify" in style or "background-color:#FFFFFF" in style:
+            base_style += " text-align:justify; background-color:#FFFFFF;"
+        p["style"] = base_style
+
+        if p.get_text(strip=True) == "":
+            p.clear()
+            p.append(BeautifulSoup("&nbsp;", "html.parser"))
+            p["class"] = p.get("class", []) + ["empty-line"]
+
+    for img in neirongxq.find_all("img"):
+        img["class"] = img.get("class", []) + ["syl-page-img"]
+        img["style"] = (
+            "box-sizing: border-box; border: 0; vertical-align: middle; "
+            "display: block; margin: 15px auto; max-width: 80%; height: auto;"
+        )
+        if img.get("src") and not img["src"].startswith(("http://", "https://")):
+            img["src"] = urljoin(BASE_URL, img["src"])
+
+    for div in neirongxq.find_all("div", class_="pgc-img"):
+        div["style"] = (
+            "box-sizing: border-box; margin: 18px 0; padding: 0; font-size: 16px; "
+            "text-align: center; color: #222222;"
+        )
+
+    for br in neirongxq.find_all("br"):
+        parent = br.parent
+        if parent and parent.name == "p" and len(parent.contents) == 1:
+            br.decompose()
+
+    style_tag = soup.new_tag("style")
+    style_tag.string = """
+    .empty-line {
+        height: 1.75em;
+        line-height: 1.75;
+    }
+    .empty-line::before {
+        content: "";
+        display: block;
+        height: 100%;
+    }
+    """
+    neirongxq.insert(0, style_tag)
+
+    return str(neirongxq)
+
+
 def get_news_list(page_no: int) -> List[Dict[str, str]]:
     """获取指定分页的新闻列表。"""
     page_url = get_page_url(page_no)
-    soup = legacy.get_soup(page_url)
+    soup = get_soup(page_url)
     if not soup:
         raise RuntimeError(f"新闻列表页请求失败: {page_url}")
 
@@ -189,6 +246,83 @@ def crawl_all_news(
             time.sleep(page_sleep)
 
 
+def parse_detail(detail_url: str, list_pub_date: str) -> Optional[Dict[str, str]]:
+    soup = get_soup(detail_url)
+    if not soup:
+        return None
+
+    raw_content = soup.select_one(".neirongxq")
+    if not raw_content:
+        for selector in (
+            ".news-content",
+            ".content",
+            ".article-content",
+            ".detail-content",
+            ".main-content",
+        ):
+            raw_content = soup.select_one(selector)
+            if raw_content:
+                break
+
+    if not raw_content:
+        for div in soup.find_all("div"):
+            text_length = len(div.get_text(strip=True))
+            p_count = len(div.find_all("p"))
+            if text_length > 200 or p_count > 2:
+                raw_content = div
+                break
+
+    content_html = normalize_rich_text(str(raw_content)) if raw_content else "<div></div>"
+
+    pub_time_str = list_pub_date
+    detail_time_p = soup.select_one(".xinwenxiangqing_bt p")
+    if detail_time_p:
+        pub_time_str = detail_time_p.get_text(strip=True)
+
+    pub_time = "1970-01-01 00:00:00"
+    if pub_time_str:
+        for pattern in (
+            r"(\d{4}[-年]\d{1,2}[-月]\d{1,2})",
+            r"(\d{4}/\d{1,2}/\d{1,2})",
+            r"(\d{4}\.\d{1,2}\.\d{1,2})",
+        ):
+            match = re.search(pattern, pub_time_str)
+            if not match:
+                continue
+            date_clean = (
+                match.group(1)
+                .replace("年", "-")
+                .replace("月", "-")
+                .replace("日", "")
+                .replace("/", "-")
+                .replace(".", "-")
+            )
+            try:
+                pub_time = datetime.strptime(date_clean, "%Y-%m-%d").strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                break
+            except ValueError:
+                continue
+
+    keywords_meta = soup.select_one('meta[name="keywords"]')
+    keywords = keywords_meta["content"] if keywords_meta and keywords_meta.get("content") else ""
+
+    img_soup = BeautifulSoup(content_html, "lxml")
+    img = img_soup.select_one("img")
+    pic_link = urljoin(detail_url, img["src"]) if img and img.get("src") else ""
+
+    return {
+        "published_time": pub_time,
+        "content": content_html,
+        "summary": "",
+        "keywords": keywords,
+        "source": CONTEXT_SOURCE,
+        "pic_link": pic_link,
+        "origin_url": detail_url,
+    }
+
+
 def parse_news_details(
     news_list: Sequence[Dict[str, str]],
     detail_sleep: float,
@@ -204,7 +338,7 @@ def parse_news_details(
         print(f"\n[{index}/{total}] 解析新闻详情: {news['main_title']}")
         print(f"详情页: {news['detail_url']}")
 
-        detail_data = legacy.parse_detail(news["detail_url"], news["pub_date"])
+        detail_data = parse_detail(news["detail_url"], news["pub_date"])
         if detail_data:
             merged = dict(news)
             merged.update(detail_data)
