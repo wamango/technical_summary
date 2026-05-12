@@ -13,6 +13,9 @@ tongtech.com 新闻全量同步脚本
     python3 全量新闻同步.py --dry-run
     python3 全量新闻同步.py --crawl-only --max-pages 1 --detail-limit 1
 
+依赖安装：
+    pip install requests beautifulsoup4 lxml pymysql
+
 数据库配置默认复用同目录下“新闻.py”的 MYSQL_CONFIG，也支持通过环境变量覆盖：
 NEWS_DB_HOST、NEWS_DB_PORT、NEWS_DB_USER、NEWS_DB_PASSWORD、NEWS_DB_NAME。
 """
@@ -47,6 +50,11 @@ def load_legacy_script():
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "缺少原新闻脚本依赖，请先安装: pip install requests beautifulsoup4 lxml pymysql"
+        ) from exc
+    else:
         return module
     finally:
         if stub_pymysql:
