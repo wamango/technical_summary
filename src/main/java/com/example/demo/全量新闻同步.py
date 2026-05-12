@@ -4,7 +4,7 @@ tongtech.com 新闻全量同步脚本
 
 功能：
 1. 从 https://www.tongtech.com/news/1.html 开始按页拉取全量新闻列表。
-2. 逐条解析详情页，新新闻按 biz_id=md5(详情页URL) 写入 t_portal_context。
+2. 逐条解析详情页，新新闻按 biz_id=md5(详情页URL) 写入 t_portal_context_copy2。
 3. 通过 context_title 与数据库比对，同标题新闻更新正文、发布时间、封面等字段，并恢复为正常状态。
 4. 官网全量列表中不存在、但数据库中仍存在的同栏目同来源标题会做逻辑删除。
 
@@ -50,6 +50,7 @@ CONTEXT_PUBLISHED = "1"
 CONTEXT_AUTHOR = "超级管理员"
 ENCLOSURE = "[]"
 CONTEXT_SOURCE = "东方通官网"
+TARGET_TABLE = "t_portal_context_copy2"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -365,9 +366,9 @@ def iter_chunks(values: Sequence[str], chunk_size: int) -> Iterable[Sequence[str
 
 
 def fetch_existing_news(conn) -> List[Dict[str, str]]:
-    sql = """
+    sql = f"""
         SELECT biz_id, status, context_title
-        FROM t_portal_context
+        FROM `{TARGET_TABLE}`
         WHERE section_id = %s
           AND context_source = %s
           AND biz_id IS NOT NULL
@@ -415,8 +416,8 @@ def upsert_news(
         return 0, 0
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    insert_sql = """
-        INSERT INTO `t_portal_context`(
+    insert_sql = f"""
+        INSERT INTO `{TARGET_TABLE}`(
             `biz_id`, `status`, `create_by`, `create_date`, `update_by`, `update_date`,
             `remarks`, `section_id`, `context_title`, `context_sub_title`,
             `context_keywords`, `context_source`, `context_summary`, `context_main`,
@@ -448,8 +449,8 @@ def upsert_news(
             `context_author_id` = VALUES(`context_author_id`),
             `enclosure` = VALUES(`enclosure`)
     """
-    update_sql = """
-        UPDATE `t_portal_context`
+    update_sql = f"""
+        UPDATE `{TARGET_TABLE}`
         SET `status` = %s,
             `update_by` = %s,
             `update_date` = %s,
@@ -544,7 +545,7 @@ def soft_delete_news(conn, biz_ids_to_delete: Sequence[str], delete_status: str)
         for chunk in iter_chunks(list(biz_ids_to_delete), 500):
             placeholders = ", ".join(["%s"] * len(chunk))
             sql = f"""
-                UPDATE t_portal_context
+                UPDATE `{TARGET_TABLE}`
                 SET status = %s,
                     update_by = %s,
                     update_date = %s
