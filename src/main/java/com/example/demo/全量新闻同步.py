@@ -42,6 +42,9 @@ MYSQL_CONFIG = {
     "password": "Golden!@#dftoms",
     "database": "tongframework_dev",
     "charset": "utf8mb4",
+    "connect_timeout": 10,
+    "read_timeout": 30,
+    "write_timeout": 30,
 }
 
 CREATE_BY = "1242684364872761344"
@@ -64,6 +67,11 @@ DEFAULT_DELETE_STATUS = os.getenv("NEWS_DELETE_STATUS", "1")
 DEFAULT_PAGE_SLEEP = float(os.getenv("NEWS_PAGE_SLEEP", "0.5"))
 DEFAULT_DETAIL_SLEEP = float(os.getenv("NEWS_DETAIL_SLEEP", "1.0"))
 DEFAULT_EMPTY_PAGE_LIMIT = int(os.getenv("NEWS_EMPTY_PAGE_LIMIT", "1"))
+
+
+def configure_stdout() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True, write_through=True)
 
 
 def md5(s: str) -> str:
@@ -89,6 +97,9 @@ def build_mysql_config() -> Dict[str, object]:
     config["password"] = os.getenv("NEWS_DB_PASSWORD", str(config.get("password", "")))
     config["database"] = os.getenv("NEWS_DB_NAME", str(config.get("database", "")))
     config["charset"] = os.getenv("NEWS_DB_CHARSET", str(config.get("charset", "utf8mb4")))
+    config["connect_timeout"] = int(os.getenv("NEWS_DB_CONNECT_TIMEOUT", str(config.get("connect_timeout", 10))))
+    config["read_timeout"] = int(os.getenv("NEWS_DB_READ_TIMEOUT", str(config.get("read_timeout", 30))))
+    config["write_timeout"] = int(os.getenv("NEWS_DB_WRITE_TIMEOUT", str(config.get("write_timeout", 30))))
     return config
 
 
@@ -212,7 +223,7 @@ def crawl_all_news(
     max_pages: int,
     page_sleep: float,
     empty_page_limit: int,
-) -> Tuple[List[Dict[str, str]], bool]:
+) -> Tuple[List[Dict[str, str]], bool, int, int]:
     """
     拉取全量新闻列表。
 
@@ -220,13 +231,15 @@ def crawl_all_news(
     """
     all_news: List[Dict[str, str]] = []
     seen_titles: Set[str] = set()
+    total_found = 0
+    duplicate_title_count = 0
     empty_pages = 0
     page_no = 1
 
     while True:
         if max_pages and page_no > max_pages:
             print(f"已达到调试分页上限 max_pages={max_pages}，停止继续抓取")
-            return all_news, False
+            return all_news, False, total_found, duplicate_title_count
 
         page_url = get_page_url(page_no)
         print(f"正在抓取新闻列表页: {page_url}")
@@ -236,17 +249,24 @@ def crawl_all_news(
             empty_pages += 1
             print(f"第 {page_no} 页未找到新闻，连续空页数: {empty_pages}/{empty_page_limit}")
             if empty_pages >= empty_page_limit:
-                return all_news, True
+                return all_news, True, total_found, duplicate_title_count
         else:
             empty_pages = 0
             added = 0
+            duplicate_in_page = 0
+            total_found += len(page_news)
             for news in page_news:
                 if news["title_key"] in seen_titles:
+                    duplicate_in_page += 1
+                    duplicate_title_count += 1
                     continue
                 seen_titles.add(news["title_key"])
                 all_news.append(news)
                 added += 1
-            print(f"第 {page_no} 页找到 {len(page_news)} 条新闻，新增 {added} 条")
+            message = f"第 {page_no} 页找到 {len(page_news)} 条新闻，按标题新增 {added} 条"
+            if duplicate_in_page:
+                message += f"，重复标题 {duplicate_in_page} 条"
+            print(message)
 
         page_no += 1
         if page_sleep > 0:
@@ -576,9 +596,15 @@ def sync_database(
         raise RuntimeError("缺少 pymysql 依赖，请先安装: pip install pymysql") from exc
 
     mysql_config = build_mysql_config()
+    print(
+        "正在连接数据库: "
+        f"{mysql_config['host']}:{mysql_config['port']}/"
+        f"{mysql_config['database']}，目标表: {TARGET_TABLE}"
+    )
     conn = pymysql.connect(**mysql_config)
 
     try:
+        print("正在读取备份表已有新闻，用 context_title 建立比对索引...")
         existing_rows = fetch_existing_news(conn)
         existing_by_title = build_existing_title_index(existing_rows, delete_status)
         active_existing_rows = [
@@ -601,15 +627,18 @@ def sync_database(
             print("当前为 dry-run 模式，不会写入或删除数据库数据")
             return
 
+        print("正在执行新增/更新...")
         inserted, updated = upsert_news(conn, parsed_news, existing_by_title, active_status)
         deleted = 0
         if no_delete:
             print("已指定 --no-delete，跳过逻辑删除")
         elif allow_delete:
+            print("正在执行逻辑删除...")
             deleted = soft_delete_news(conn, missing_biz_ids, delete_status)
         else:
             print("本次不是完整全量抓取或官网列表为空，跳过逻辑删除以避免误删")
 
+        print("正在提交事务...")
         conn.commit()
         print("\n========== 数据库同步完成 ==========")
         print(f"新增成功: {inserted}")
@@ -638,11 +667,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    configure_stdout()
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
     print("开始抓取东方通官网全量新闻...")
-    news_list, completed = crawl_all_news(
+    news_list, completed, total_found, duplicate_title_count = crawl_all_news(
         max_pages=args.max_pages,
         page_sleep=args.page_sleep,
         empty_page_limit=args.empty_page_limit,
@@ -653,7 +683,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
     source_title_keys = {news["title_key"] for news in news_list if news["title_key"]}
-    print(f"\n官网新闻列表抓取完成，共 {len(news_list)} 条，完整抓取: {completed}")
+    print(
+        "\n官网新闻列表抓取完成，"
+        f"页面原始条数: {total_found}，"
+        f"按 context_title 去重后: {len(news_list)}，"
+        f"重复标题: {duplicate_title_count}，"
+        f"完整抓取: {completed}"
+    )
+    if duplicate_title_count:
+        print("说明：数据库比对字段是 context_title，重复标题只会保留一条进入后续比对。")
 
     parsed_news, failed_news = parse_news_details(
         news_list=news_list,
