@@ -26,8 +26,9 @@ import os
 import re
 import sys
 import time
+from collections import Counter, defaultdict, deque
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Deque, Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urljoin
 
 import requests
@@ -230,7 +231,7 @@ def crawl_all_news(
     返回值第二项表示是否完成全量抓取。设置 max_pages 时只适合调试，不能用于软删除。
     """
     all_news: List[Dict[str, str]] = []
-    seen_titles: Set[str] = set()
+    seen_titles = set()
     total_found = 0
     duplicate_title_count = 0
     empty_pages = 0
@@ -252,20 +253,19 @@ def crawl_all_news(
                 return all_news, True, total_found, duplicate_title_count
         else:
             empty_pages = 0
-            added = 0
+            page_titles = [news["title_key"] for news in page_news if news["title_key"]]
+            unique_in_page = len(set(page_titles))
             duplicate_in_page = 0
             total_found += len(page_news)
             for news in page_news:
                 if news["title_key"] in seen_titles:
                     duplicate_in_page += 1
                     duplicate_title_count += 1
-                    continue
-                seen_titles.add(news["title_key"])
                 all_news.append(news)
-                added += 1
-            message = f"第 {page_no} 页找到 {len(page_news)} 条新闻，按标题新增 {added} 条"
+                seen_titles.add(news["title_key"])
+            message = f"第 {page_no} 页找到 {len(page_news)} 条新闻，本页唯一标题 {unique_in_page} 个"
             if duplicate_in_page:
-                message += f"，重复标题 {duplicate_in_page} 条"
+                message += f"，全局重复标题 {duplicate_in_page} 条"
             print(message)
 
         page_no += 1
@@ -410,26 +410,45 @@ def fetch_existing_news(conn) -> List[Dict[str, str]]:
 def build_existing_title_index(
     existing_rows: Sequence[Dict[str, str]],
     delete_status: str,
-) -> Dict[str, Dict[str, str]]:
-    existing_by_title: Dict[str, Dict[str, str]] = {}
-    for row in existing_rows:
+) -> Dict[str, Deque[Dict[str, str]]]:
+    existing_by_title: Dict[str, Deque[Dict[str, str]]] = defaultdict(deque)
+    sorted_rows = sorted(
+        existing_rows,
+        key=lambda row: (row["status"] == delete_status, row["biz_id"]),
+    )
+    for row in sorted_rows:
         key = row["title_key"]
         if not key:
             continue
+        existing_by_title[key].append(row)
 
-        current = existing_by_title.get(key)
-        if current is None or (
-            current["status"] == delete_status and row["status"] != delete_status
-        ):
-            existing_by_title[key] = row
+    return dict(existing_by_title)
 
-    return existing_by_title
+
+def find_surplus_existing_biz_ids(
+    existing_rows: Sequence[Dict[str, str]],
+    source_title_counts: Counter,
+    delete_status: str,
+) -> List[str]:
+    active_rows_by_title: Dict[str, List[Dict[str, str]]] = defaultdict(list)
+    for row in existing_rows:
+        if row["status"] == delete_status or not row["title_key"]:
+            continue
+        active_rows_by_title[row["title_key"]].append(row)
+
+    surplus_biz_ids = []
+    for key, rows in active_rows_by_title.items():
+        rows.sort(key=lambda row: row["biz_id"])
+        keep_count = source_title_counts.get(key, 0)
+        surplus_biz_ids.extend(row["biz_id"] for row in rows[keep_count:])
+
+    return sorted(set(surplus_biz_ids))
 
 
 def upsert_news(
     conn,
     parsed_news: Sequence[Dict[str, object]],
-    existing_by_title: Dict[str, Dict[str, str]],
+    existing_by_title: Dict[str, Deque[Dict[str, str]]],
     active_status: str,
 ) -> Tuple[int, int]:
     if not parsed_news:
@@ -495,8 +514,9 @@ def upsert_news(
     update_params = []
     for news in parsed_news:
         key = title_key(str(news["main_title"]))
-        existing = existing_by_title.get(key)
-        if existing:
+        existing_queue = existing_by_title.get(key)
+        if existing_queue:
+            existing = existing_queue.popleft()
             update_params.append(
                 (
                     active_status,
@@ -582,7 +602,7 @@ def soft_delete_news(conn, biz_ids_to_delete: Sequence[str], delete_status: str)
 
 
 def sync_database(
-    source_title_keys: Set[str],
+    source_title_counts: Counter,
     parsed_news: Sequence[Dict[str, object]],
     dry_run: bool,
     no_delete: bool,
@@ -610,16 +630,18 @@ def sync_database(
         active_existing_rows = [
             row for row in existing_rows if row["status"] != delete_status and row["title_key"]
         ]
-        missing_rows = [
-            row for row in active_existing_rows if row["title_key"] not in source_title_keys
-        ]
-        missing_biz_ids = sorted({row["biz_id"] for row in missing_rows})
+        missing_biz_ids = find_surplus_existing_biz_ids(
+            existing_rows,
+            source_title_counts,
+            delete_status,
+        )
 
         print("\n========== 数据库比对结果 ==========")
         print("比对字段: context_title")
         print(f"数据库同栏目官网新闻总数: {len(existing_rows)}")
         print(f"数据库未逻辑删除新闻数: {len(active_existing_rows)}")
-        print(f"官网全量新闻标题数: {len(source_title_keys)}")
+        print(f"官网全量新闻条数: {sum(source_title_counts.values())}")
+        print(f"官网唯一标题数: {len(source_title_counts)}")
         print(f"待新增/更新新闻数: {len(parsed_news)}")
         print(f"待逻辑删除新闻数: {len(missing_biz_ids)}")
 
@@ -682,16 +704,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("官网新闻列表为空，终止任务以避免误删数据库数据")
         return 1
 
-    source_title_keys = {news["title_key"] for news in news_list if news["title_key"]}
+    source_title_counts = Counter(news["title_key"] for news in news_list if news["title_key"])
     print(
         "\n官网新闻列表抓取完成，"
         f"页面原始条数: {total_found}，"
-        f"按 context_title 去重后: {len(news_list)}，"
+        f"保留处理条数: {len(news_list)}，"
+        f"唯一标题数: {len(source_title_counts)}，"
         f"重复标题: {duplicate_title_count}，"
         f"完整抓取: {completed}"
     )
     if duplicate_title_count:
-        print("说明：数据库比对字段是 context_title，重复标题只会保留一条进入后续比对。")
+        print("说明：数据库比对字段是 context_title，重复标题会按出现次数逐条匹配，不会在抓取阶段丢弃。")
 
     parsed_news, failed_news = parse_news_details(
         news_list=news_list,
@@ -706,9 +729,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("已指定 --crawl-only，跳过数据库同步")
         return 0
 
-    allow_delete = completed and args.detail_limit == 0 and len(source_title_keys) > 0
+    allow_delete = completed and args.detail_limit == 0 and len(source_title_counts) > 0
     sync_database(
-        source_title_keys=source_title_keys,
+        source_title_counts=source_title_counts,
         parsed_news=parsed_news,
         dry_run=args.dry_run,
         no_delete=args.no_delete,
