@@ -24,12 +24,11 @@ import os
 import re
 import sys
 import time
+import types
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from urllib.parse import urljoin
-
-import pymysql
 
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -37,13 +36,21 @@ LEGACY_SCRIPT = CURRENT_DIR / "新闻.py"
 
 
 def load_legacy_script():
+    stub_pymysql = importlib.util.find_spec("pymysql") is None
+    if stub_pymysql:
+        sys.modules["pymysql"] = types.ModuleType("pymysql")
+
     spec = importlib.util.spec_from_file_location("tongtech_legacy_news", str(LEGACY_SCRIPT))
     if not spec or not spec.loader:
         raise RuntimeError(f"无法加载原始脚本: {LEGACY_SCRIPT}")
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if stub_pymysql:
+            sys.modules.pop("pymysql", None)
 
 
 legacy = load_legacy_script()
@@ -329,6 +336,11 @@ def sync_database(
     active_status: str,
     delete_status: str,
 ) -> None:
+    try:
+        import pymysql
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("缺少 pymysql 依赖，请先安装: pip install pymysql") from exc
+
     mysql_config = build_mysql_config()
     conn = pymysql.connect(**mysql_config)
 
