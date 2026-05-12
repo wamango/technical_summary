@@ -4,9 +4,9 @@ tongtech.com 新闻全量同步脚本
 
 功能：
 1. 从 https://www.tongtech.com/news/1.html 开始按页拉取全量新闻列表。
-2. 逐条解析详情页并按 biz_id=md5(详情页URL) 写入 t_portal_context。
-3. 数据库中已存在的重复新闻会更新正文、标题、发布时间、封面等字段，并恢复为正常状态。
-4. 官网全量列表中不存在、但数据库中仍存在的同栏目官网新闻会做逻辑删除。
+2. 逐条解析详情页，新新闻按 biz_id=md5(详情页URL) 写入 t_portal_context。
+3. 通过 context_title 与数据库比对，同标题新闻更新正文、发布时间、封面等字段，并恢复为正常状态。
+4. 官网全量列表中不存在、但数据库中仍存在的同栏目同来源标题会做逻辑删除。
 
 常用命令：
     python3 全量新闻同步.py
@@ -97,6 +97,11 @@ def get_page_url(page_no: int) -> str:
 
 def normalize_title(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
+
+
+def title_key(text: str) -> str:
+    """标题比对统一走该方法，避免空白字符差异导致重复。"""
+    return normalize_title(text)
 
 
 def extract_news_date(pub_date: str) -> str:
@@ -190,6 +195,7 @@ def get_news_list(page_no: int) -> List[Dict[str, str]]:
             news_list.append(
                 {
                     "biz_id": md5(detail_url),
+                    "title_key": title_key(main_title),
                     "main_title": main_title,
                     "sub_title": sub_title,
                     "detail_url": detail_url,
@@ -212,7 +218,7 @@ def crawl_all_news(
     返回值第二项表示是否完成全量抓取。设置 max_pages 时只适合调试，不能用于软删除。
     """
     all_news: List[Dict[str, str]] = []
-    seen_biz_ids: Set[str] = set()
+    seen_titles: Set[str] = set()
     empty_pages = 0
     page_no = 1
 
@@ -234,9 +240,9 @@ def crawl_all_news(
             empty_pages = 0
             added = 0
             for news in page_news:
-                if news["biz_id"] in seen_biz_ids:
+                if news["title_key"] in seen_titles:
                     continue
-                seen_biz_ids.add(news["biz_id"])
+                seen_titles.add(news["title_key"])
                 all_news.append(news)
                 added += 1
             print(f"第 {page_no} 页找到 {len(page_news)} 条新闻，新增 {added} 条")
@@ -358,25 +364,58 @@ def iter_chunks(values: Sequence[str], chunk_size: int) -> Iterable[Sequence[str
         yield values[index : index + chunk_size]
 
 
-def fetch_existing_news(conn) -> Dict[str, str]:
+def fetch_existing_news(conn) -> List[Dict[str, str]]:
     sql = """
-        SELECT biz_id, status
+        SELECT biz_id, status, context_title
         FROM t_portal_context
         WHERE section_id = %s
           AND context_source = %s
           AND biz_id IS NOT NULL
+          AND context_title IS NOT NULL
     """
     with conn.cursor() as cur:
         cur.execute(sql, (SECTION_ID, CONTEXT_SOURCE))
-        return {str(row[0]): "" if row[1] is None else str(row[1]) for row in cur.fetchall()}
+        return [
+            {
+                "biz_id": str(row[0]),
+                "status": "" if row[1] is None else str(row[1]),
+                "context_title": normalize_title(str(row[2] or "")),
+                "title_key": title_key(str(row[2] or "")),
+            }
+            for row in cur.fetchall()
+        ]
 
 
-def upsert_news(conn, parsed_news: Sequence[Dict[str, object]], active_status: str) -> int:
+def build_existing_title_index(
+    existing_rows: Sequence[Dict[str, str]],
+    delete_status: str,
+) -> Dict[str, Dict[str, str]]:
+    existing_by_title: Dict[str, Dict[str, str]] = {}
+    for row in existing_rows:
+        key = row["title_key"]
+        if not key:
+            continue
+
+        current = existing_by_title.get(key)
+        if current is None or (
+            current["status"] == delete_status and row["status"] != delete_status
+        ):
+            existing_by_title[key] = row
+
+    return existing_by_title
+
+
+def upsert_news(
+    conn,
+    parsed_news: Sequence[Dict[str, object]],
+    existing_by_title: Dict[str, Dict[str, str]],
+    active_status: str,
+) -> Tuple[int, int]:
     if not parsed_news:
-        return 0
+        return 0, 0
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    sql = """
+    insert_sql = """
         INSERT INTO `t_portal_context`(
             `biz_id`, `status`, `create_by`, `create_date`, `update_by`, `update_date`,
             `remarks`, `section_id`, `context_title`, `context_sub_title`,
@@ -409,10 +448,59 @@ def upsert_news(conn, parsed_news: Sequence[Dict[str, object]], active_status: s
             `context_author_id` = VALUES(`context_author_id`),
             `enclosure` = VALUES(`enclosure`)
     """
+    update_sql = """
+        UPDATE `t_portal_context`
+        SET `status` = %s,
+            `update_by` = %s,
+            `update_date` = %s,
+            `section_id` = %s,
+            `context_title` = %s,
+            `context_sub_title` = %s,
+            `context_keywords` = %s,
+            `context_source` = %s,
+            `context_summary` = %s,
+            `context_main` = %s,
+            `published_time` = %s,
+            `context_re_link` = %s,
+            `context_pic_link` = %s,
+            `context_published` = %s,
+            `context_author` = %s,
+            `context_author_id` = %s,
+            `enclosure` = %s
+        WHERE `biz_id` = %s
+    """
 
-    params = []
+    insert_params = []
+    update_params = []
     for news in parsed_news:
-        params.append(
+        key = title_key(str(news["main_title"]))
+        existing = existing_by_title.get(key)
+        if existing:
+            update_params.append(
+                (
+                    active_status,
+                    CREATE_BY,
+                    now,
+                    SECTION_ID,
+                    news["main_title"],
+                    news["sub_title"],
+                    news.get("keywords", ""),
+                    news.get("source") or CONTEXT_SOURCE,
+                    news.get("summary", ""),
+                    news.get("content", "<div></div>"),
+                    news.get("published_time", "1970-01-01 00:00:00"),
+                    news.get("origin_url", news["detail_url"]),
+                    news.get("pic_link", ""),
+                    CONTEXT_PUBLISHED,
+                    CONTEXT_AUTHOR,
+                    CREATE_BY,
+                    ENCLOSURE,
+                    existing["biz_id"],
+                )
+            )
+            continue
+
+        insert_params.append(
             (
                 news["biz_id"],
                 active_status,
@@ -438,19 +526,22 @@ def upsert_news(conn, parsed_news: Sequence[Dict[str, object]], active_status: s
         )
 
     with conn.cursor() as cur:
-        cur.executemany(sql, params)
+        if update_params:
+            cur.executemany(update_sql, update_params)
+        if insert_params:
+            cur.executemany(insert_sql, insert_params)
 
-    return len(params)
+    return len(insert_params), len(update_params)
 
 
-def soft_delete_news(conn, biz_ids: Sequence[str], delete_status: str) -> int:
-    if not biz_ids:
+def soft_delete_news(conn, biz_ids_to_delete: Sequence[str], delete_status: str) -> int:
+    if not biz_ids_to_delete:
         return 0
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     total = 0
     with conn.cursor() as cur:
-        for chunk in iter_chunks(list(biz_ids), 500):
+        for chunk in iter_chunks(list(biz_ids_to_delete), 500):
             placeholders = ", ".join(["%s"] * len(chunk))
             sql = f"""
                 UPDATE t_portal_context
@@ -470,7 +561,7 @@ def soft_delete_news(conn, biz_ids: Sequence[str], delete_status: str) -> int:
 
 
 def sync_database(
-    source_biz_ids: Set[str],
+    source_title_keys: Set[str],
     parsed_news: Sequence[Dict[str, object]],
     dry_run: bool,
     no_delete: bool,
@@ -487,35 +578,41 @@ def sync_database(
     conn = pymysql.connect(**mysql_config)
 
     try:
-        existing = fetch_existing_news(conn)
-        active_existing_ids = {
-            biz_id for biz_id, status in existing.items() if status != delete_status
-        }
-        missing_on_site = sorted(active_existing_ids - source_biz_ids)
+        existing_rows = fetch_existing_news(conn)
+        existing_by_title = build_existing_title_index(existing_rows, delete_status)
+        active_existing_rows = [
+            row for row in existing_rows if row["status"] != delete_status and row["title_key"]
+        ]
+        missing_rows = [
+            row for row in active_existing_rows if row["title_key"] not in source_title_keys
+        ]
+        missing_biz_ids = sorted({row["biz_id"] for row in missing_rows})
 
         print("\n========== 数据库比对结果 ==========")
-        print(f"数据库同栏目官网新闻总数: {len(existing)}")
-        print(f"数据库未逻辑删除新闻数: {len(active_existing_ids)}")
-        print(f"官网全量新闻数: {len(source_biz_ids)}")
+        print("比对字段: context_title")
+        print(f"数据库同栏目官网新闻总数: {len(existing_rows)}")
+        print(f"数据库未逻辑删除新闻数: {len(active_existing_rows)}")
+        print(f"官网全量新闻标题数: {len(source_title_keys)}")
         print(f"待新增/更新新闻数: {len(parsed_news)}")
-        print(f"待逻辑删除新闻数: {len(missing_on_site)}")
+        print(f"待逻辑删除新闻数: {len(missing_biz_ids)}")
 
         if dry_run:
             print("当前为 dry-run 模式，不会写入或删除数据库数据")
             return
 
-        upserted = upsert_news(conn, parsed_news, active_status)
+        inserted, updated = upsert_news(conn, parsed_news, existing_by_title, active_status)
         deleted = 0
         if no_delete:
             print("已指定 --no-delete，跳过逻辑删除")
         elif allow_delete:
-            deleted = soft_delete_news(conn, missing_on_site, delete_status)
+            deleted = soft_delete_news(conn, missing_biz_ids, delete_status)
         else:
             print("本次不是完整全量抓取或官网列表为空，跳过逻辑删除以避免误删")
 
         conn.commit()
         print("\n========== 数据库同步完成 ==========")
-        print(f"新增/更新成功: {upserted}")
+        print(f"新增成功: {inserted}")
+        print(f"更新成功: {updated}")
         print(f"逻辑删除成功: {deleted}")
     except Exception:
         conn.rollback()
@@ -554,7 +651,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("官网新闻列表为空，终止任务以避免误删数据库数据")
         return 1
 
-    source_biz_ids = {news["biz_id"] for news in news_list}
+    source_title_keys = {news["title_key"] for news in news_list if news["title_key"]}
     print(f"\n官网新闻列表抓取完成，共 {len(news_list)} 条，完整抓取: {completed}")
 
     parsed_news, failed_news = parse_news_details(
@@ -570,9 +667,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("已指定 --crawl-only，跳过数据库同步")
         return 0
 
-    allow_delete = completed and args.detail_limit == 0 and len(source_biz_ids) > 0
+    allow_delete = completed and args.detail_limit == 0 and len(source_title_keys) > 0
     sync_database(
-        source_biz_ids=source_biz_ids,
+        source_title_keys=source_title_keys,
         parsed_news=parsed_news,
         dry_run=args.dry_run,
         no_delete=args.no_delete,
