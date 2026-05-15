@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 
-app = FastAPI(title="OpenAI Proxy for IDEA - Debug V2.3", version="2.3.0")
+app = FastAPI(title="OpenAI Proxy for IDEA - Debug V2.4", version="2.4.0")
 
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://10.10.55.244:9997")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-yE7cO7oR9nF2d")
@@ -21,9 +21,13 @@ MAX_PROMPT_TOKENS = int(os.getenv("MAX_PROMPT_TOKENS", "9000"))
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
 MAX_SINGLE_MESSAGE_TOKENS = int(os.getenv("MAX_SINGLE_MESSAGE_TOKENS", "3000"))
 MAX_SYSTEM_MESSAGE_TOKENS = int(os.getenv("MAX_SYSTEM_MESSAGE_TOKENS", "1800"))
+MAX_TOOL_MESSAGE_TOKENS = int(os.getenv("MAX_TOOL_MESSAGE_TOKENS", "4000"))
 MAX_COMPLETION_TOKENS = int(os.getenv("MAX_COMPLETION_TOKENS", "2048"))
+TOOL_CALL_MODE = os.getenv("TOOL_CALL_MODE", "prompt").lower()
+TOOL_CALL_PARSE_ENABLED = os.getenv("TOOL_CALL_PARSE_ENABLED", "true").lower() != "false"
+TOOL_PROMPT_MARKER = "[IDEA_TOOL_CALLS]"
 
-print("🚀 IDEA Debug Proxy V2.3 Started")
+print("🚀 IDEA Debug Proxy V2.4 Started")
 
 
 def estimate_text_tokens(text: str) -> int:
@@ -109,6 +113,182 @@ def cap_completion_tokens(body: Dict[str, Any], request_id: str) -> None:
             body[key] = MAX_COMPLETION_TOKENS
 
 
+def get_tool_call_mode() -> str:
+    if TOOL_CALL_MODE in {"prompt", "pass_through", "drop"}:
+        return TOOL_CALL_MODE
+    print(f"[proxy] Unknown TOOL_CALL_MODE={TOOL_CALL_MODE!r}, fallback to prompt")
+    return "prompt"
+
+
+def json_dumps_compact(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def tool_choice_is_none(tool_choice: Any) -> bool:
+    if tool_choice is None:
+        return False
+    if isinstance(tool_choice, str):
+        return tool_choice.lower() == "none"
+    if isinstance(tool_choice, dict):
+        choice_type = str(tool_choice.get("type") or "").lower()
+        return choice_type == "none"
+    return False
+
+
+def build_tool_prompt(tools: List[Dict[str, Any]], tool_choice: Any) -> str:
+    function_tools: List[Dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        if tool.get("type") != "function":
+            continue
+        function = tool.get("function")
+        if not isinstance(function, dict) or not function.get("name"):
+            continue
+        function_tools.append(
+            {
+                "name": function.get("name"),
+                "description": function.get("description", ""),
+                "parameters": function.get("parameters", {"type": "object", "properties": {}}),
+            }
+        )
+
+    if not function_tools:
+        return ""
+
+    choice_instruction = "Tool use is optional. If no tool is needed, answer normally."
+    if isinstance(tool_choice, str) and tool_choice.lower() in {"required", "any"}:
+        choice_instruction = "You must call one of the available tools."
+    elif isinstance(tool_choice, dict):
+        function_choice = tool_choice.get("function")
+        if isinstance(function_choice, dict) and function_choice.get("name"):
+            choice_instruction = f"You must call the tool named {function_choice['name']!r}."
+        elif str(tool_choice.get("type") or "").lower() == "required":
+            choice_instruction = "You must call one of the available tools."
+
+    return (
+        f"{TOOL_PROMPT_MARKER}\n"
+        "The client supports OpenAI tool calls, but this local backend may only understand text.\n"
+        "When a tool call is needed, respond with exactly one JSON object and no markdown:\n"
+        '{"tool_calls":[{"name":"tool_name","arguments":{"arg":"value"}}]}\n'
+        "The arguments object must match the selected tool schema. Do not explain the tool call.\n"
+        f"{choice_instruction}\n"
+        "Available tools:\n"
+        f"{json.dumps(function_tools, ensure_ascii=False, indent=2)}"
+    )
+
+
+def merge_tool_prompt_into_messages(body: Dict[str, Any], prompt: str) -> None:
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        body["messages"] = [{"role": "system", "content": prompt}]
+        return
+
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") not in {"system", "developer"}:
+            continue
+
+        content = message.get("content")
+        content_text = content if isinstance(content, str) else extract_text(content)
+        # Put the tool prompt first because system messages are trimmed from the end.
+        message["content"] = f"{prompt}\n\n{content_text}" if content_text else prompt
+        return
+
+    messages.insert(0, {"role": "system", "content": prompt})
+
+
+def stringify_tool_calls(tool_calls: Any) -> str:
+    if not tool_calls:
+        return ""
+    try:
+        return json.dumps(tool_calls, ensure_ascii=False)
+    except TypeError:
+        return str(tool_calls)
+
+
+def downgrade_tool_messages_for_text_backend(body: Dict[str, Any]) -> None:
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return
+
+    downgraded_messages: List[Dict[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+
+        normalized = dict(message)
+        role = normalized.get("role")
+
+        if role == "tool":
+            tool_name = normalized.get("name") or normalized.get("tool_call_id") or "unknown"
+            normalized["role"] = "user"
+            normalized["content"] = f"[tool result: {tool_name}]\n{extract_text(normalized.get('content'))}"
+            normalized.pop("tool_call_id", None)
+            normalized.pop("name", None)
+
+        tool_calls = normalized.pop("tool_calls", None)
+        if tool_calls:
+            content = extract_text(normalized.get("content"))
+            call_text = stringify_tool_calls(tool_calls)
+            normalized["content"] = (
+                f"{content}\n[assistant tool_calls]\n{call_text}" if content else f"[assistant tool_calls]\n{call_text}"
+            )
+
+        normalized.pop("function_call", None)
+        downgraded_messages.append(normalized)
+
+    body["messages"] = downgraded_messages
+
+
+def prepare_tools_for_backend(body: Dict[str, Any], request_id: str) -> Dict[str, Any]:
+    tools = body.get("tools")
+    tool_choice = body.get("tool_choice")
+    mode = get_tool_call_mode()
+    context = {
+        "mode": mode,
+        "prompt_tools": False,
+        "tools": tools if isinstance(tools, list) else [],
+        "tool_choice": tool_choice,
+    }
+
+    if not isinstance(tools, list) or not tools:
+        return context
+
+    if mode == "pass_through":
+        print(f"[{request_id}] Tools pass-through enabled: {len(tools)} tool(s)")
+        return context
+
+    body.pop("tools", None)
+    body.pop("tool_choice", None)
+    body.pop("parallel_tool_calls", None)
+
+    if mode == "drop" or tool_choice_is_none(tool_choice):
+        print(f"[{request_id}] Tools removed: mode={mode}, tool_choice={tool_choice}")
+        downgrade_tool_messages_for_text_backend(body)
+        return context
+
+    prompt = build_tool_prompt(tools, tool_choice)
+    if not prompt:
+        print(f"[{request_id}] No supported function tools found; tools removed")
+        downgrade_tool_messages_for_text_backend(body)
+        return context
+
+    merge_tool_prompt_into_messages(body, prompt)
+    downgrade_tool_messages_for_text_backend(body)
+    context["prompt_tools"] = True
+    print(f"[{request_id}] Tools converted to prompt: {len(tools)} tool(s)")
+    return context
+
+
+def get_system_message_budget(message: Dict[str, Any]) -> int:
+    content = message.get("content")
+    if isinstance(content, str) and TOOL_PROMPT_MARKER in content:
+        return max(MAX_SYSTEM_MESSAGE_TOKENS, MAX_TOOL_MESSAGE_TOKENS)
+    return MAX_SYSTEM_MESSAGE_TOKENS
+
+
 def trim_messages_for_local_model(body: Dict[str, Any], request_id: str) -> None:
     if not CONTEXT_TRIM_ENABLED:
         return
@@ -125,7 +305,7 @@ def trim_messages_for_local_model(body: Dict[str, Any], request_id: str) -> None
     original_tokens = estimate_messages_tokens(normalized_messages)
 
     system_messages = [
-        trim_message_to_tokens(message, MAX_SYSTEM_MESSAGE_TOKENS, keep="start")
+        trim_message_to_tokens(message, get_system_message_budget(message), keep="start")
         for message in normalized_messages
         if message.get("role") in {"system", "developer"}
     ][:1]
@@ -261,6 +441,280 @@ def extract_usage(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def normalize_tool_arguments(arguments: Any) -> str:
+    if arguments is None:
+        return "{}"
+    if isinstance(arguments, str):
+        stripped = arguments.strip()
+        if not stripped:
+            return "{}"
+        try:
+            return json_dumps_compact(json.loads(stripped))
+        except Exception:
+            return stripped
+    return json_dumps_compact(arguments)
+
+
+def make_tool_call(name: str, arguments: Any, call_id: Optional[str] = None) -> Dict[str, Any]:
+    return {
+        "id": call_id or f"call_{uuid.uuid4().hex[:24]}",
+        "type": "function",
+        "function": {
+            "name": name,
+            "arguments": normalize_tool_arguments(arguments),
+        },
+    }
+
+
+def first_present(mapping: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
+    for key in keys:
+        if key in mapping:
+            return mapping[key]
+    return default
+
+
+def normalize_tool_call_item(item: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(item, dict):
+        return None
+
+    function = item.get("function")
+    name = first_present(item, ["name", "tool_name", "tool", "function_name"])
+    arguments = first_present(item, ["arguments", "args", "parameters", "input"], {})
+
+    if isinstance(function, dict):
+        name = function.get("name") or name
+        arguments = first_present(function, ["arguments", "args", "parameters", "input"], arguments)
+
+    if not isinstance(name, str) or not name:
+        return None
+
+    call_id = item.get("id")
+    return make_tool_call(name, arguments, call_id if isinstance(call_id, str) else None)
+
+
+def extract_tool_calls_from_object(value: Any) -> List[Dict[str, Any]]:
+    if isinstance(value, list):
+        calls = []
+        for item in value:
+            call = normalize_tool_call_item(item)
+            if call:
+                calls.append(call)
+        return calls
+
+    if not isinstance(value, dict):
+        return []
+
+    for key in ("tool_calls", "toolCalls", "calls"):
+        calls_value = value.get(key)
+        if isinstance(calls_value, list):
+            calls = extract_tool_calls_from_object(calls_value)
+            if calls:
+                return calls
+
+    for key in ("tool_call", "toolCall", "function_call", "functionCall"):
+        call_value = value.get(key)
+        if isinstance(call_value, dict):
+            call = normalize_tool_call_item(call_value)
+            if call:
+                return [call]
+
+    call = normalize_tool_call_item(value)
+    return [call] if call else []
+
+
+def strip_json_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    lines = stripped.splitlines()
+    if lines:
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def iter_balanced_json_candidates(text: str) -> List[str]:
+    candidates: List[str] = []
+    for start_index, char in enumerate(text):
+        if char not in "{[":
+            continue
+
+        stack: List[str] = []
+        in_string = False
+        escaped = False
+
+        for index in range(start_index, len(text)):
+            current = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif current == "\\":
+                    escaped = True
+                elif current == '"':
+                    in_string = False
+                continue
+
+            if current == '"':
+                in_string = True
+            elif current in "{[":
+                stack.append(current)
+            elif current in "}]":
+                if not stack:
+                    break
+                opener = stack.pop()
+                if (opener == "{" and current != "}") or (opener == "[" and current != "]"):
+                    break
+                if not stack:
+                    candidates.append(text[start_index : index + 1])
+                    break
+
+    return candidates
+
+
+def parse_tool_calls_from_text(text: str) -> List[Dict[str, Any]]:
+    if not TOOL_CALL_PARSE_ENABLED:
+        return []
+
+    stripped = strip_json_code_fence(text)
+    candidates = [stripped] + iter_balanced_json_candidates(stripped)
+    seen = set()
+
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            value = json.loads(candidate)
+        except Exception:
+            continue
+
+        calls = extract_tool_calls_from_object(value)
+        if calls:
+            return calls
+
+    return []
+
+
+def normalize_non_stream_tool_response(
+    data: Dict[str, Any],
+    tool_context: Dict[str, Any],
+    request_id: str,
+) -> Dict[str, Any]:
+    if not tool_context.get("prompt_tools"):
+        return data
+
+    choices = data.get("choices")
+    if not isinstance(choices, list):
+        return data
+
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            message = {"role": "assistant", "content": choice.get("text", "")}
+
+        if message.get("tool_calls"):
+            choice["message"] = message
+            choice["finish_reason"] = "tool_calls"
+            continue
+
+        content = extract_text(message.get("content")) or extract_text(choice.get("text"))
+        calls = parse_tool_calls_from_text(content)
+        if not calls:
+            continue
+
+        message["role"] = message.get("role") or "assistant"
+        message["content"] = None
+        message["tool_calls"] = calls
+        message.pop("function_call", None)
+        choice["message"] = message
+        choice["finish_reason"] = "tool_calls"
+        print(f"[{request_id}] Parsed {len(calls)} tool call(s) from non-stream response")
+
+    return data
+
+
+def extract_choice_content(chunk: Dict[str, Any]) -> str:
+    choices = chunk.get("choices")
+    if not isinstance(choices, list):
+        return ""
+
+    parts: List[str] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+
+        delta = choice.get("delta")
+        if isinstance(delta, dict):
+            text = delta.get("content") or delta.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+
+        message = choice.get("message")
+        if isinstance(message, dict):
+            text = extract_text(message.get("content"))
+            if text:
+                parts.append(text)
+
+        text = choice.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+
+    return "".join(parts)
+
+
+def make_tool_call_stream_chunk(
+    chunk_id: str,
+    created: int,
+    model: str,
+    tool_calls: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    delta_tool_calls = []
+    for index, call in enumerate(tool_calls):
+        delta_tool_calls.append(
+            {
+                "index": index,
+                "id": call["id"],
+                "type": "function",
+                "function": call["function"],
+            }
+        )
+
+    return {
+        "id": chunk_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"tool_calls": delta_tool_calls},
+                "finish_reason": None,
+            }
+        ],
+    }
+
+
+def make_tool_call_finish_chunk(chunk_id: str, created: int, model: str) -> Dict[str, Any]:
+    return {
+        "id": chunk_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": "tool_calls",
+            }
+        ],
+    }
+
+
 def is_finish_chunk(chunk: Dict[str, Any]) -> bool:
     event_type = str(chunk.get("type") or chunk.get("event") or "").lower()
     if event_type in {
@@ -332,10 +786,8 @@ async def chat_completions(request: Request):
         
         print(f"[{request_id}] Request | Stream: {stream} | Model: {model}")
 
-        # 清理字段
-        body.pop("tools", None)
-        body.pop("tool_choice", None)
-        body.pop("parallel_tool_calls", None)
+        # 本地模型不一定原生支持 OpenAI tools；默认转成提示词并在响应侧还原 tool_calls。
+        tool_context = prepare_tools_for_backend(body, request_id)
         trim_messages_for_local_model(body, request_id)
         cap_completion_tokens(body, request_id)
 
@@ -362,7 +814,7 @@ async def chat_completions(request: Request):
                 return JSONResponse(status_code=resp.status_code, content={"error": "backend error"})
 
             data = resp.json()
-            return data
+            return normalize_non_stream_tool_response(data, tool_context, request_id)
 
         # ==================== Streaming Debug ====================
         async def generate_stream() -> AsyncGenerator[str, None]:
@@ -371,6 +823,8 @@ async def chat_completions(request: Request):
             token_count = 0
             sent_stop_chunk = False
             sent_done_marker = False
+            buffered_tool_text: List[str] = []
+            buffered_usage: Optional[Dict[str, Any]] = None
 
             print(f"[{request_id}] === Streaming Started ===")
 
@@ -407,6 +861,8 @@ async def chat_completions(request: Request):
 
                             if line == "data: [DONE]" or line.endswith("[DONE]"):
                                 print(f"[{request_id}] [DONE] received")
+                                if tool_context.get("prompt_tools"):
+                                    break
                                 if not sent_stop_chunk:
                                     done_chunk = make_stream_chunk(chunk_id, created, model, finish_reason="stop")
                                     yield f"data: {json.dumps(done_chunk, ensure_ascii=False)}\n\n"
@@ -426,6 +882,17 @@ async def chat_completions(request: Request):
                                     continue
 
                                 for normalized_chunk in normalize_stream_chunk(chunk, chunk_id, created, model):
+                                    if tool_context.get("prompt_tools"):
+                                        content = extract_choice_content(normalized_chunk)
+                                        if content:
+                                            buffered_tool_text.append(content)
+                                            token_count += 1
+                                            print(f"[{request_id}] Buffered tool token {token_count}: {content}")
+                                        usage = extract_usage(normalized_chunk)
+                                        if usage is not None:
+                                            buffered_usage = usage
+                                        continue
+
                                     if is_finish_chunk(normalized_chunk):
                                         sent_stop_chunk = True
 
@@ -440,6 +907,9 @@ async def chat_completions(request: Request):
                                     yield f"data: {json.dumps(normalized_chunk, ensure_ascii=False)}\n\n"
                             except Exception as e:
                                 print(f"[{request_id}] Parse error: {e}")
+                                if tool_context.get("prompt_tools"):
+                                    buffered_tool_text.append(data)
+                                    continue
                                 fallback_chunk = make_stream_chunk(chunk_id, created, model, content=data)
                                 yield f"data: {json.dumps(fallback_chunk, ensure_ascii=False)}\n\n"
             except Exception as e:
@@ -447,6 +917,27 @@ async def chat_completions(request: Request):
                 traceback.print_exc()
                 error_chunk = make_stream_chunk(chunk_id, created, model, content=f"Proxy stream error: {e}")
                 yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+
+            if tool_context.get("prompt_tools"):
+                buffered_text = "".join(buffered_tool_text).strip()
+                tool_calls = parse_tool_calls_from_text(buffered_text)
+                if tool_calls:
+                    print(f"[{request_id}] Parsed {len(tool_calls)} tool call(s) from stream response")
+                    tool_chunk = make_tool_call_stream_chunk(chunk_id, created, model, tool_calls)
+                    yield f"data: {json.dumps(tool_chunk, ensure_ascii=False)}\n\n"
+                    finish_chunk = make_tool_call_finish_chunk(chunk_id, created, model)
+                    if buffered_usage is not None:
+                        finish_chunk["usage"] = buffered_usage
+                    yield f"data: {json.dumps(finish_chunk, ensure_ascii=False)}\n\n"
+                else:
+                    if buffered_text:
+                        fallback_chunk = make_stream_chunk(chunk_id, created, model, content=buffered_text)
+                        if buffered_usage is not None:
+                            fallback_chunk["usage"] = buffered_usage
+                        yield f"data: {json.dumps(fallback_chunk, ensure_ascii=False)}\n\n"
+                    done_chunk = make_stream_chunk(chunk_id, created, model, finish_reason="stop")
+                    yield f"data: {json.dumps(done_chunk, ensure_ascii=False)}\n\n"
+                sent_stop_chunk = True
 
             print(f"[{request_id}] Streaming ended, total tokens: {token_count}")
             if not sent_stop_chunk:
