@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 
-app = FastAPI(title="OpenAI Proxy for IDEA - Debug V2.4", version="2.4.0")
+app = FastAPI(title="OpenAI Proxy for IDEA - Debug V2.4.1", version="2.4.1")
 
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://10.10.55.244:9997")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-yE7cO7oR9nF2d")
@@ -23,11 +23,12 @@ MAX_SINGLE_MESSAGE_TOKENS = int(os.getenv("MAX_SINGLE_MESSAGE_TOKENS", "3000"))
 MAX_SYSTEM_MESSAGE_TOKENS = int(os.getenv("MAX_SYSTEM_MESSAGE_TOKENS", "1800"))
 MAX_TOOL_MESSAGE_TOKENS = int(os.getenv("MAX_TOOL_MESSAGE_TOKENS", "4000"))
 MAX_COMPLETION_TOKENS = int(os.getenv("MAX_COMPLETION_TOKENS", "2048"))
-TOOL_CALL_MODE = os.getenv("TOOL_CALL_MODE", "prompt").lower()
+TOOL_CALL_MODE = os.getenv("TOOL_CALL_MODE", "pass_through").lower()
+TOOL_STREAM_PARSE_MODE = os.getenv("TOOL_STREAM_PARSE_MODE", "required_only").lower()
 TOOL_CALL_PARSE_ENABLED = os.getenv("TOOL_CALL_PARSE_ENABLED", "true").lower() != "false"
 TOOL_PROMPT_MARKER = "[IDEA_TOOL_CALLS]"
 
-print("🚀 IDEA Debug Proxy V2.4 Started")
+print("🚀 IDEA Debug Proxy V2.4.1 Started")
 
 
 def estimate_text_tokens(text: str) -> int:
@@ -116,8 +117,15 @@ def cap_completion_tokens(body: Dict[str, Any], request_id: str) -> None:
 def get_tool_call_mode() -> str:
     if TOOL_CALL_MODE in {"prompt", "pass_through", "drop"}:
         return TOOL_CALL_MODE
-    print(f"[proxy] Unknown TOOL_CALL_MODE={TOOL_CALL_MODE!r}, fallback to prompt")
-    return "prompt"
+    print(f"[proxy] Unknown TOOL_CALL_MODE={TOOL_CALL_MODE!r}, fallback to pass_through")
+    return "pass_through"
+
+
+def get_tool_stream_parse_mode() -> str:
+    if TOOL_STREAM_PARSE_MODE in {"always", "required_only", "never"}:
+        return TOOL_STREAM_PARSE_MODE
+    print(f"[proxy] Unknown TOOL_STREAM_PARSE_MODE={TOOL_STREAM_PARSE_MODE!r}, fallback to required_only")
+    return "required_only"
 
 
 def json_dumps_compact(value: Any) -> str:
@@ -133,6 +141,33 @@ def tool_choice_is_none(tool_choice: Any) -> bool:
         choice_type = str(tool_choice.get("type") or "").lower()
         return choice_type == "none"
     return False
+
+
+def tool_choice_requires_call(tool_choice: Any) -> bool:
+    if isinstance(tool_choice, str):
+        return tool_choice.lower() in {"required", "any"}
+    if isinstance(tool_choice, dict):
+        choice_type = str(tool_choice.get("type") or "").lower()
+        if choice_type in {"required", "function"}:
+            return True
+        function_choice = tool_choice.get("function")
+        return isinstance(function_choice, dict) and bool(function_choice.get("name"))
+    return False
+
+
+def should_buffer_tool_stream(tool_context: Dict[str, Any]) -> bool:
+    if not tool_context.get("prompt_tools"):
+        return False
+
+    mode = get_tool_stream_parse_mode()
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+
+    # Keep normal code-block streaming intact for IDEA Apply; only buffer when
+    # the client explicitly requires a tool call and we need to synthesize one.
+    return tool_choice_requires_call(tool_context.get("tool_choice"))
 
 
 def build_tool_prompt(tools: List[Dict[str, Any]], tool_choice: Any) -> str:
@@ -825,6 +860,7 @@ async def chat_completions(request: Request):
             sent_done_marker = False
             buffered_tool_text: List[str] = []
             buffered_usage: Optional[Dict[str, Any]] = None
+            buffer_tool_stream = should_buffer_tool_stream(tool_context)
 
             print(f"[{request_id}] === Streaming Started ===")
 
@@ -861,7 +897,7 @@ async def chat_completions(request: Request):
 
                             if line == "data: [DONE]" or line.endswith("[DONE]"):
                                 print(f"[{request_id}] [DONE] received")
-                                if tool_context.get("prompt_tools"):
+                                if buffer_tool_stream:
                                     break
                                 if not sent_stop_chunk:
                                     done_chunk = make_stream_chunk(chunk_id, created, model, finish_reason="stop")
@@ -882,7 +918,7 @@ async def chat_completions(request: Request):
                                     continue
 
                                 for normalized_chunk in normalize_stream_chunk(chunk, chunk_id, created, model):
-                                    if tool_context.get("prompt_tools"):
+                                    if buffer_tool_stream:
                                         content = extract_choice_content(normalized_chunk)
                                         if content:
                                             buffered_tool_text.append(content)
@@ -907,7 +943,7 @@ async def chat_completions(request: Request):
                                     yield f"data: {json.dumps(normalized_chunk, ensure_ascii=False)}\n\n"
                             except Exception as e:
                                 print(f"[{request_id}] Parse error: {e}")
-                                if tool_context.get("prompt_tools"):
+                                if buffer_tool_stream:
                                     buffered_tool_text.append(data)
                                     continue
                                 fallback_chunk = make_stream_chunk(chunk_id, created, model, content=data)
@@ -918,7 +954,7 @@ async def chat_completions(request: Request):
                 error_chunk = make_stream_chunk(chunk_id, created, model, content=f"Proxy stream error: {e}")
                 yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
 
-            if tool_context.get("prompt_tools"):
+            if buffer_tool_stream:
                 buffered_text = "".join(buffered_tool_text).strip()
                 tool_calls = parse_tool_calls_from_text(buffered_text)
                 if tool_calls:
