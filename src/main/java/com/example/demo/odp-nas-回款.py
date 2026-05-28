@@ -153,7 +153,7 @@ while True:
             processed_payments += 1
             continue
 
-        # 对同一个回款单的附件，需要复制到每个关联的合同文件夹下
+        # 对同一个回款单的附件，复制到每个关联的合同文件夹下
         for detail in payment_details:
             contract_no = detail.get("contractNo", "未知合同号")
             contract_name = detail.get("contractName", "未知合同名称")
@@ -162,15 +162,13 @@ while True:
             main_dir = os.path.join(BASE_SAVE_PATH, main_folder_name)
             os.makedirs(main_dir, exist_ok=True)
 
-        # === 新增：统一创建8个必须的子文件夹 ===
-        for sub_name in REQUIRED_SUBDIRS:
-            sub_dir = os.path.join(main_dir, sub_name)
-            if not os.path.exists(sub_dir):
-                os.makedirs(sub_dir)
+            for sub_name in REQUIRED_SUBDIRS:
+                sub_dir = os.path.join(main_dir, sub_name)
+                if not os.path.exists(sub_dir):
+                    os.makedirs(sub_dir)
 
             sub_name = "回款凭证"
             sub_dir = os.path.join(main_dir, sub_name)
-            
 
             print(f"处理回款单 {payment_receipt_number} → 合同文件夹: {main_folder_name}")
 
