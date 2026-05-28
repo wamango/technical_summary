@@ -45,6 +45,22 @@ def sanitize_filename(filename):
     return filename if filename else "未命名文件"
 
 
+# 若目录下已有同名文件，则在主文件名后追加 -1、-2…，保留已有文件
+def resolve_unique_save_path(directory, filename):
+    save_path = os.path.join(directory, filename)
+    if not os.path.exists(save_path):
+        return save_path
+    name, ext = os.path.splitext(filename)
+    counter = 1
+    while True:
+        candidate_name = f"{name}-{counter}{ext}"
+        save_path = os.path.join(directory, candidate_name)
+        if not os.path.exists(save_path):
+            return save_path
+        counter += 1
+
+
+# 下载单个文件到指定路径
 def download_file(url, save_path, authorization):
     for attempt in range(RETRY_TIMES):
         try:
@@ -55,8 +71,7 @@ def download_file(url, save_path, authorization):
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
-                existed = os.path.exists(save_path)  # 下载前已存在→覆盖
-                print(f" 下载成功（{'覆盖' if existed else '新建'}）: {os.path.basename(save_path)}")
+                print(f" 下载成功: {os.path.basename(save_path)}")
                 return True
             else:
                 print(f" 下载失败 [{attempt+1}/{RETRY_TIMES}]: HTTP {response.status_code}")
@@ -162,9 +177,12 @@ while True:
 
                 name = unquote(name)
                 filename = sanitize_filename(name)
-                save_path = os.path.join(sub_dir, filename)
-
-                print(f"下载 [变更-{sub_name}] {filename}")
+                save_path = resolve_unique_save_path(sub_dir, filename)
+                actual_name = os.path.basename(save_path)
+                if actual_name != filename:
+                    print(f"下载 [变更-{sub_name}] {filename} -> {actual_name}（同名已存在，保留原文件）")
+                else:
+                    print(f"下载 [变更-{sub_name}] {filename}")
                 if download_file(url, save_path, authorization):
                     total_downloaded += 1
                 time.sleep(DOWNLOAD_DELAY)
