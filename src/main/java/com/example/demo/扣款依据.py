@@ -20,12 +20,10 @@ PAGE_SIZE = 20
 RETRY_TIMES = 3
 # 下载间隔（秒），防止被接口限流
 DOWNLOAD_DELAY = 0.5
-# 扣款依据子文件夹名称
-SUB_DIR_NAME = "扣款依据"
-# 接口返回的扣款依据附件字段名（如与实际不符请修改）
-DEDUCTION_BASIS_FIELD = "deductionBasisUrl"
+# 合同查询地址
+QUERY_URL = "https://api.zdsztech.com/employee-web-application/external/queryData/FXmiJ65u06"
 
-# 与原脚本保持一致，保留原有 8 个子文件夹
+# 统一必须存在的子文件夹（含新增扣款依据）
 REQUIRED_SUBDIRS = [
     "中标通知书",
     "合同电子版",
@@ -34,8 +32,14 @@ REQUIRED_SUBDIRS = [
     "合同关键页扫描件",
     "发票扫描件",
     "里程碑验收",
-    "回款凭证"
+    "回款凭证",
+    "扣款依据"
 ]
+
+# 子文件夹与接口返回字段映射（本脚本仅下载扣款依据）
+SUB_DIR_FIELDS = {
+    "扣款依据": "deductionBasisUrl"
+}
 # ===============================================
 
 
@@ -65,16 +69,11 @@ def get_unique_save_path(directory, filename):
 
 
 def ensure_contract_dirs(main_dir):
-    """保留原有子文件夹结构，并补充创建「扣款依据」文件夹。"""
+    """保留完整子文件夹结构，不存在时才创建。"""
     for sub_name in REQUIRED_SUBDIRS:
         sub_dir = os.path.join(main_dir, sub_name)
         if not os.path.exists(sub_dir):
             os.makedirs(sub_dir)
-
-    deduction_dir = os.path.join(main_dir, SUB_DIR_NAME)
-    if not os.path.exists(deduction_dir):
-        os.makedirs(deduction_dir)
-    return deduction_dir
 
 
 def download_file(url, save_path, authorization):
@@ -122,7 +121,6 @@ if token_json.get("code") != "200" or not token_json.get("success"):
 authorization = token_json["data"]["accessToken"]
 print("token 获取成功\n")
 
-query_url = "https://api.zdsztech.com/employee-web-application/external/queryData/FXmiJ65u06"
 headers = {
     "Authorization": authorization,
     "Content-Type": "application/json"
@@ -141,7 +139,7 @@ while True:
         "pageSize": PAGE_SIZE
     }
     print(f"正在查询第 {page_num} 页合同数据...")
-    resp_query = requests.post(query_url, json=query_payload, headers=headers, timeout=30)
+    resp_query = requests.post(QUERY_URL, json=query_payload, headers=headers, timeout=30)
     if resp_query.status_code != 200:
         print(f"查询合同失败，HTTP 状态码: {resp_query.status_code}")
         print(resp_query.text)
@@ -167,31 +165,36 @@ while True:
         main_folder_name = sanitize_filename(f"{contract_no}_{contract_name}")
         main_dir = os.path.join(BASE_SAVE_PATH, main_folder_name)
         os.makedirs(main_dir, exist_ok=True)
-        sub_dir = ensure_contract_dirs(main_dir)
+        ensure_contract_dirs(main_dir)
 
-        file_list = item.get(DEDUCTION_BASIS_FIELD, [])
-        if not file_list:
-            processed_contracts += 1
-            print(f"√ 合同处理完成（无扣款依据附件）: {main_folder_name}\n")
-            continue
-
-        for file_info in file_list:
-            name = file_info.get("name")
-            url = file_info.get("url")
-            if not name or not url:
+        has_attachment = False
+        for sub_name, field_name in SUB_DIR_FIELDS.items():
+            file_list = item.get(field_name, [])
+            if not file_list:
                 continue
 
-            name = unquote(name)
-            filename = sanitize_filename(name)
-            save_path = get_unique_save_path(sub_dir, filename)
+            sub_dir = os.path.join(main_dir, sub_name)
+            for file_info in file_list:
+                name = file_info.get("name")
+                url = file_info.get("url")
+                if not name or not url:
+                    continue
 
-            print(f"下载 [{SUB_DIR_NAME}] {os.path.basename(save_path)}")
-            if download_file(url, save_path, authorization):
-                total_downloaded += 1
-            time.sleep(DOWNLOAD_DELAY)
+                has_attachment = True
+                name = unquote(name)
+                filename = sanitize_filename(name)
+                save_path = get_unique_save_path(sub_dir, filename)
+
+                print(f"下载 [{sub_name}] {os.path.basename(save_path)}")
+                if download_file(url, save_path, authorization):
+                    total_downloaded += 1
+                time.sleep(DOWNLOAD_DELAY)
 
         processed_contracts += 1
-        print(f"√ 合同处理完成: {main_folder_name}\n")
+        if has_attachment:
+            print(f"√ 合同处理完成: {main_folder_name}\n")
+        else:
+            print(f"√ 合同处理完成（无扣款依据附件）: {main_folder_name}\n")
 
     if page_num * PAGE_SIZE >= total:
         break
