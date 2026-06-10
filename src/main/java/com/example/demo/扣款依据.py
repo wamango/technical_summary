@@ -24,6 +24,18 @@ DOWNLOAD_DELAY = 0.5
 SUB_DIR_NAME = "扣款依据"
 # 接口返回的扣款依据附件字段名（如与实际不符请修改）
 DEDUCTION_BASIS_FIELD = "deductionBasisUrl"
+
+# 与原脚本保持一致，保留原有 8 个子文件夹
+REQUIRED_SUBDIRS = [
+    "中标通知书",
+    "合同电子版",
+    "合同电子版客户水印版",
+    "合同扫描件",
+    "合同关键页扫描件",
+    "发票扫描件",
+    "里程碑验收",
+    "回款凭证"
+]
 # ===============================================
 
 
@@ -52,12 +64,17 @@ def get_unique_save_path(directory, filename):
         counter += 1
 
 
-def ensure_deduction_dir(main_dir):
-    """仅在当前合同下不存在「扣款依据」文件夹时创建。"""
-    sub_dir = os.path.join(main_dir, SUB_DIR_NAME)
-    if not os.path.exists(sub_dir):
-        os.makedirs(sub_dir)
-    return sub_dir
+def ensure_contract_dirs(main_dir):
+    """保留原有子文件夹结构，并补充创建「扣款依据」文件夹。"""
+    for sub_name in REQUIRED_SUBDIRS:
+        sub_dir = os.path.join(main_dir, sub_name)
+        if not os.path.exists(sub_dir):
+            os.makedirs(sub_dir)
+
+    deduction_dir = os.path.join(main_dir, SUB_DIR_NAME)
+    if not os.path.exists(deduction_dir):
+        os.makedirs(deduction_dir)
+    return deduction_dir
 
 
 def download_file(url, save_path, authorization):
@@ -145,16 +162,18 @@ while True:
         break
 
     for item in rows:
-        file_list = item.get(DEDUCTION_BASIS_FIELD, [])
-        if not file_list:
-            continue
-
         contract_no = item.get("contractNo", "未知合同号")
         contract_name = item.get("contractName", "未知合同名称")
         main_folder_name = sanitize_filename(f"{contract_no}_{contract_name}")
         main_dir = os.path.join(BASE_SAVE_PATH, main_folder_name)
         os.makedirs(main_dir, exist_ok=True)
-        sub_dir = ensure_deduction_dir(main_dir)
+        sub_dir = ensure_contract_dirs(main_dir)
+
+        file_list = item.get(DEDUCTION_BASIS_FIELD, [])
+        if not file_list:
+            processed_contracts += 1
+            print(f"√ 合同处理完成（无扣款依据附件）: {main_folder_name}\n")
+            continue
 
         for file_info in file_list:
             name = file_info.get("name")
