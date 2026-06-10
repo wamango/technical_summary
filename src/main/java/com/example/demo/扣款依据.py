@@ -23,8 +23,8 @@ DOWNLOAD_DELAY = 0.5
 # 合同扣款查询地址
 QUERY_URL = "https://api.zdsztech.com/employee-web-application/external/queryData/5i3jh8SSQ0"
 
-# 统一必须存在的子文件夹（含新增扣款依据）
-REQUIRED_SUBDIRS = [
+# 原有 8 个子文件夹（历史脚本已创建的合同目录）
+LEGACY_SUBDIRS = [
     "中标通知书",
     "合同电子版",
     "合同电子版客户水印版",
@@ -32,13 +32,16 @@ REQUIRED_SUBDIRS = [
     "合同关键页扫描件",
     "发票扫描件",
     "里程碑验收",
-    "回款凭证",
-    "扣款依据"
+    "回款凭证"
 ]
+# 新增扣款依据子文件夹
+DEDUCTION_SUBDIR = "扣款依据"
+# 新合同需要创建的完整子文件夹列表
+REQUIRED_SUBDIRS = LEGACY_SUBDIRS + [DEDUCTION_SUBDIR]
 
 # 子文件夹与接口返回字段映射（本脚本仅下载扣款依据）
 SUB_DIR_FIELDS = {
-    "扣款依据": "debitContractUrl"
+    DEDUCTION_SUBDIR: "debitContractUrl"
 }
 # ===============================================
 
@@ -68,8 +71,25 @@ def get_unique_save_path(directory, filename):
         counter += 1
 
 
-def ensure_contract_dirs(main_dir):
-    """保留完整子文件夹结构，不存在时才创建。"""
+def is_existing_contract_dir(main_dir):
+    """判断是否为历史脚本已创建过的合同目录（存在任一原有 8 个子文件夹即可）。"""
+    if not os.path.isdir(main_dir):
+        return False
+    return any(os.path.isdir(os.path.join(main_dir, name)) for name in LEGACY_SUBDIRS)
+
+
+def ensure_contract_dirs(main_dir, is_existing):
+    """
+    已存在合同：仅补充「扣款依据」文件夹，不改动原有 8 个文件夹及其中文件。
+    新合同：创建完整 9 个子文件夹。
+    """
+    if is_existing:
+        sub_dir = os.path.join(main_dir, DEDUCTION_SUBDIR)
+        if not os.path.exists(sub_dir):
+            os.makedirs(sub_dir)
+            print(f"  已存在合同，新增文件夹: {DEDUCTION_SUBDIR}")
+        return
+
     for sub_name in REQUIRED_SUBDIRS:
         sub_dir = os.path.join(main_dir, sub_name)
         if not os.path.exists(sub_dir):
@@ -163,8 +183,9 @@ while True:
         contract_name = item.get("contractName", "未知合同名称")
         main_folder_name = sanitize_filename(f"{contract_no}_{contract_name}")
         main_dir = os.path.join(BASE_SAVE_PATH, main_folder_name)
+        is_existing = is_existing_contract_dir(main_dir)
         os.makedirs(main_dir, exist_ok=True)
-        ensure_contract_dirs(main_dir)
+        ensure_contract_dirs(main_dir, is_existing)
 
         has_attachment = False
         for sub_name, field_name in SUB_DIR_FIELDS.items():
