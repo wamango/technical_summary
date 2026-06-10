@@ -20,8 +20,8 @@ PAGE_SIZE = 20
 RETRY_TIMES = 3
 # 下载间隔（秒），防止被接口限流
 DOWNLOAD_DELAY = 0.5
-# 合同查询地址
-QUERY_URL = "https://api.zdsztech.com/employee-web-application/external/queryData/FXmiJ65u06"
+# 合同扣款查询地址
+QUERY_URL = "https://api.zdsztech.com/employee-web-application/external/queryData/5i3jh8SSQ0"
 
 # 统一必须存在的子文件夹（含新增扣款依据）
 REQUIRED_SUBDIRS = [
@@ -38,7 +38,7 @@ REQUIRED_SUBDIRS = [
 
 # 子文件夹与接口返回字段映射（本脚本仅下载扣款依据）
 SUB_DIR_FIELDS = {
-    "扣款依据": "deductionBasisUrl"
+    "扣款依据": "debitContractUrl"
 }
 # ===============================================
 
@@ -132,7 +132,6 @@ processed_contracts = 0
 
 while True:
     query_payload = {
-        "type": "date",
         "startDate": START_DATE,
         "endDate": END_DATE,
         "pageNum": page_num,
