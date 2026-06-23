@@ -1,0 +1,30 @@
+# 复制为 invoice_reconcile.local.yaml 后填写（该文件不会提交到 Git）
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: your_user
+  password: your_password
+  database: your_database
+  charset: utf8mb4
+
+# 入库表名
+table: invoice_inbound
+
+# 数据库字段名（改成你表里的实际列名）
+fields:
+  digital_invoice_no: digital_invoice_no   # 数电发票号码
+  invoice_code: invoice_code               # 发票代码
+  invoice_no: invoice_no                   # 发票号码
+  amount: total_amount_with_tax            # 价税合计
+  invoice_type: invoice_type               # 发票票种
+  invoice_status: invoice_status           # 发票状态（可选）
+  category: major_category                 # 大类（summary 模式必填）
+  invoice_date: invoice_date               # 开票日期（可选）
+
+# 只查 2023 年数据，缩小查询范围
+where: "invoice_date >= '2023-01-01' AND invoice_date < '2024-01-01'"
+
+# 与 Excel 透视表一致：排除作废
+exclude_void_in_excel: true
+exclude_void_in_db: true
