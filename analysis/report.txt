@@ -1,0 +1,109 @@
+Total draws parsed: 100
+Range: 25111 (2025-09-25) -> 26059 (2026-05-26)
+
+=== 1. Number frequency (Reds 1-33) ===
+01: 23  | 02: 28  | 03: 26
+04: 17  | 05: 13  | 06: 17
+07: 14  | 08: 19  | 09: 25
+10: 20  | 11: 12  | 12: 13
+13: 29  | 14: 15  | 15: 16
+16: 12  | 17: 13  | 18: 19
+19: 18  | 20: 14  | 21: 11
+22: 21  | 23: 18  | 24: 26
+25: 22  | 26: 14  | 27: 14
+28: 18  | 29: 14  | 30: 25
+31: 18  | 32: 17  | 33: 19
+
+Top10 Hot reds  : [(13, 29), (2, 28), (3, 26), (24, 26), (9, 25), (30, 25), (1, 23), (25, 22), (22, 21), (10, 20)]
+Bottom10 Cold reds: [(21, 11), (11, 12), (16, 12), (5, 13), (12, 13), (17, 13), (7, 14), (20, 14), (26, 14), (27, 14)]
+
+=== Blue 1-16 freq ===
+01:  8  | 02: 10  | 03:  7  | 04:  6
+05:  6  | 06:  5  | 07:  6  | 08:  6
+09:  2  | 10: 13  | 11:  4  | 12:  6
+13:  7  | 14:  2  | 15:  6  | 16:  6
+Top5 Hot blues: [(10, 13), (2, 10), (1, 8), (3, 7), (13, 7)]
+Bottom5 Cold blues: [(9, 2), (14, 2), (11, 4), (6, 5), (4, 6)]
+
+=== 2. Repeated red numbers between consecutive issues ===
+Distribution of #repeated-reds between issue N-1 and N (99 pairs total):
+  0 repeated red(s): 24 times  ( 24.2%)  theoretical:  40.6%
+  1 repeated red(s): 39 times  ( 39.4%)  theoretical:  44.2%
+  2 repeated red(s): 29 times  ( 29.3%)  theoretical:  13.8%
+  3 repeated red(s):  7 times  (  7.1%)  theoretical:   1.3%
+  => At least 1 red repeated: 75/99 = 75.8%  (theory ~59.4%)
+
+Blue ball repeated in consecutive issues: 5/99 = 5.1%  (theory 1/16=6.25%)
+Longest streak of consecutive pairs each sharing >=1 red: 16
+
+=== 3. Reds also appearing in previous N issues ===
+  Window N=2: avg reds also in prior 2 issues = 2.02/6    (#draws sharing NONE: 2/98)
+  Window N=3: avg reds also in prior 3 issues = 2.76/6    (#draws sharing NONE: 0/97)
+  Window N=5: avg reds also in prior 5 issues = 3.88/6    (#draws sharing NONE: 0/95)
+  Window N=10: avg reds also in prior 10 issues = 5.24/6    (#draws sharing NONE: 0/90)
+
+=== 4. Reds sum / odd-even / big-small ===
+  Reds sum  -> min 41, max 153, avg 99.7, median 100
+     40- 59: ### (3)
+     60- 79: ############### (15)
+     80- 99: ############################## (30)
+    100-119: ################################# (33)
+    120-139: ################ (16)
+    140-159: ### (3)
+  Odd-count distribution (odd reds in 6): {1: 10, 2: 16, 3: 43, 4: 21, 5: 10}
+  Big-count distribution (>=17 in 6)   : {0: 2, 1: 5, 2: 23, 3: 39, 4: 22, 5: 9}
+
+  Three-zone distribution (1-11 / 12-22 / 23-33) top 10 patterns:
+    (2, 2, 2): 17
+    (3, 1, 2): 12
+    (1, 3, 2): 10
+    (1, 2, 3): 9
+    (3, 2, 1): 9
+    (2, 3, 1): 7
+    (2, 1, 3): 7
+    (3, 0, 3): 4
+    (2, 0, 4): 4
+    (4, 1, 1): 4
+
+=== 5. Span ===
+  Span (max-min) -> min 11, max 32, avg 25.1
+
+=== 6. Consecutive pairs within a single draw ===
+  #consecutive-pairs per draw: {0: 42, 1: 36, 2: 16, 3: 6}
+  => at least one consecutive pair: 58/100 = 58%  (theory ~59%)
+
+=== 7. Current "missing streak" per red number (newest issue is the right side) ===
+  10 reds with the longest current absence:
+    05: not seen for 42 issues
+    23: not seen for 19 issues
+    12: not seen for 17 issues
+    17: not seen for 14 issues
+    18: not seen for 10 issues
+    06: not seen for 9 issues
+    27: not seen for 9 issues
+    09: not seen for 8 issues
+    15: not seen for 8 issues
+    02: not seen for 6 issues
+  10 reds with shortest absence (recently appeared):
+    08: not seen for 0 issues
+    16: not seen for 0 issues
+    26: not seen for 0 issues
+    28: not seen for 0 issues
+    29: not seen for 0 issues
+    30: not seen for 0 issues
+    01: not seen for 1 issues
+    04: not seen for 1 issues
+    07: not seen for 1 issues
+    21: not seen for 1 issues
+
+=== 8. Last 10 draws (oldest -> newest) ===
+  26050 2026-05-05  Red: 06 09 25 27 28 30  Blue: 03
+  26051 2026-05-07  Red: 09 14 15 16 29 30  Blue: 10
+  26052 2026-05-10  Red: 01 03 11 22 26 31  Blue: 11
+  26053 2026-05-12  Red: 01 02 03 08 13 14  Blue: 02
+  26054 2026-05-14  Red: 13 20 25 29 30 33  Blue: 02
+  26055 2026-05-17  Red: 04 11 24 25 32 33  Blue: 13
+  26056 2026-05-19  Red: 10 19 21 22 31 33  Blue: 05
+  26057 2026-05-21  Red: 01 10 22 24 28 30  Blue: 07
+  26058 2026-05-24  Red: 01 04 07 21 29 30  Blue: 01
+  26059 2026-05-26  Red: 08 16 26 28 29 30  Blue: 15
