@@ -4,25 +4,23 @@ import os
 import re
 import time
 from urllib.parse import unquote
-from datetime import datetime, timedelta  # 新增：导入 datetime
+from datetime import datetime, timedelta  # 用于自动计算昨天日期
 
 # ==================== 配置区 ====================
-# 请修改为你的实际保存路径（NAS挂载点或本地目录）
-BASE_SAVE_PATH = "/home/tongtech/ODP/contract"  # Linux 示例路径
+# 保存路径（保持和合同脚本一致）
+BASE_SAVE_PATH = "/home/tongtech/ODP/contract"  # 不要改这里
 # 自动获取昨天的日期范围（00:00 - 23:59）
 yesterday = datetime.now() - timedelta(days=1)
-START_DATE = yesterday.strftime("%Y-%m-%d")   # 例如: 2025-12-23
-END_DATE = yesterday.strftime("%Y-%m-%d")     # 例如: 2025-12-23
-# START_DATE = "2026-01-01"
-# END_DATE = "2026-01-14"
-# 每页查询条数（建议 20~50）
+START_DATE = yesterday.strftime("%Y-%m-%d 00:00")   # 如: 2025-12-30 00:00
+END_DATE = yesterday.strftime("%Y-%m-%d 23:59")     # 如: 2025-12-30 23:59
+
+# 每页查询条数
 PAGE_SIZE = 20
 # 下载失败重试次数
 RETRY_TIMES = 3
-# 下载间隔（秒），防止被接口限流
+# 下载间隔（秒）
 DOWNLOAD_DELAY = 0.5
 # ===============================================
-
 # 统一必须存在的8个子文件夹（顺序可随意）
 REQUIRED_SUBDIRS = [
     "中标通知书",
@@ -38,11 +36,8 @@ REQUIRED_SUBDIRS = [
 # 清理非法文件名字符
 def sanitize_filename(filename):
     filename = str(filename)
-    # 替换 Windows/Linux 不允许的字符
     filename = re.sub(r'[\/:*?"<>|]', '_', filename)
-    # 去除首尾空格、点
     filename = filename.strip(" .")
-    # 限制长度，避免路径过长
     if len(filename) > 200:
         filename = filename[:200]
     return filename if filename else "未命名文件"
@@ -85,6 +80,7 @@ def download_file(url, save_path, authorization):
 # ==================== 主程序开始 ====================
 os.makedirs(BASE_SAVE_PATH, exist_ok=True)
 print(f"文件将保存至: {BASE_SAVE_PATH}\n")
+print(f"查询发票日期范围: {START_DATE} ~ {END_DATE}\n")
 
 # 第一步：获取 token
 token_url = "https://user.zdsztech.com/employee-web-application/systemCert/getTokenInfo"
@@ -107,36 +103,36 @@ if token_json.get("code") != "200" or not token_json.get("success"):
 authorization = token_json["data"]["accessToken"]
 print("token 获取成功\n")
 
-# 第二步：准备查询合同接口
-query_url = "https://api.zdsztech.com/employee-web-application/external/queryData/FXmiJ65u06"
+# 第二步：发票查询接口
+query_url = "https://api.zdsztech.com/employee-web-application/external/queryData/589rFofrI3"
 headers = {
     "Authorization": authorization,
     "Content-Type": "application/json"
 }
 
-# 第三步：分页拉取所有合同并下载附件
+# 第三步：分页拉取所有发票并下载附件
 page_num = 1
 total_downloaded = 0
-processed_contracts = 0
+processed_invoices = 0
 
 while True:
     query_payload = {
-        "type": "date",
+        "type": "Invoice",
         "startDate": START_DATE,
         "endDate": END_DATE,
         "pageNum": page_num,
         "pageSize": PAGE_SIZE
     }
-    print(f"正在查询第 {page_num} 页合同数据...")
+    print(f"正在查询第 {page_num} 页发票数据...")
     resp_query = requests.post(query_url, json=query_payload, headers=headers, timeout=30)
     if resp_query.status_code != 200:
-        print(f"查询合同失败，HTTP 状态码: {resp_query.status_code}")
+        print(f"查询发票失败，HTTP 状态码: {resp_query.status_code}")
         print(resp_query.text)
         break
 
     query_json = resp_query.json()
     if query_json.get("code") != "200" or not query_json.get("success"):
-        print("查询合同返回业务失败:", query_json.get("message"))
+        print("查询发票返回业务失败:", query_json.get("message"))
         break
 
     data = query_json["data"]
@@ -149,53 +145,53 @@ while True:
         break
 
     for item in rows:
+        # 使用合同号和合同名称作为主文件夹名（和原合同脚本一致）
         contract_no = item.get("contractNo", "未知合同号")
         contract_name = item.get("contractName", "未知合同名称")
-        # 主文件夹
+
+        # 主文件夹：合同号_合同名称（保持原逻辑）
         main_folder_name = sanitize_filename(f"{contract_no}_{contract_name}")
         main_dir = os.path.join(BASE_SAVE_PATH, main_folder_name)
-        os.makedirs(main_dir, exist_ok=True)
-        
+        os.makedirs(main_dir, exist_ok=True)  # 不存在则创建
+
         # === 新增：统一创建8个必须的子文件夹 ===
         for sub_name in REQUIRED_SUBDIRS:
             sub_dir = os.path.join(main_dir, sub_name)
             if not os.path.exists(sub_dir):
                 os.makedirs(sub_dir)
+            
+        # 只创建一个子文件夹：发票扫描件
+        sub_name = "发票扫描件"
+        sub_dir = os.path.join(main_dir, sub_name)
+       
 
-        # 四个子文件夹及其对应的文件列表
-        sub_dirs = {
-            "合同电子版": item.get("electronicContractUrl", []),
-            "合同电子版客户水印版": item.get("watermarkedContractUrl", []),
-            "中标通知书": item.get("bidNoticeUrl", []),
-            "合同扫描件": item.get("contractScanUrl", [])
-        }
+        file_list = item.get("InvoiceAttachment", [])
+        if not file_list:
+            print(f"无附件: {main_folder_name}")
+            processed_invoices += 1
+            print(f"√ 发票处理完成（无附件）: {main_folder_name}\n")
+            continue
 
-        for sub_name, file_list in sub_dirs.items():
-            sub_dir = os.path.join(main_dir, sub_name)
-
-            if not file_list:
+        for file_info in file_list:
+            name = file_info.get("name")
+            url = file_info.get("url")
+            if not name or not url:
                 continue
 
-            for file_info in file_list:
-                name = file_info.get("name")
-                url = file_info.get("url")
-                if not name or not url:
-                    continue
+            name = unquote(name)
+            filename = sanitize_filename(name)
+            save_path = resolve_unique_save_path(sub_dir, filename)
+            actual_name = os.path.basename(save_path)
+            if actual_name != filename:
+                print(f"下载 [{sub_name}] {filename} -> {actual_name}（同名已存在，保留原文件）")
+            else:
+                print(f"下载 [{sub_name}] {filename}")
+            if download_file(url, save_path, authorization):
+                total_downloaded += 1
+            time.sleep(DOWNLOAD_DELAY)
 
-                name = unquote(name)
-                filename = sanitize_filename(name)
-                save_path = resolve_unique_save_path(sub_dir, filename)
-                actual_name = os.path.basename(save_path)
-                if actual_name != filename:
-                    print(f"下载 [{sub_name}] {filename} -> {actual_name}（同名已存在，保留原文件）")
-                else:
-                    print(f"下载 [{sub_name}] {filename}")
-                if download_file(url, save_path, authorization):
-                    total_downloaded += 1
-                time.sleep(DOWNLOAD_DELAY)
-
-        processed_contracts += 1
-        print(f"√ 合同处理完成: {main_folder_name}\n")
+        processed_invoices += 1
+        print(f"√ 发票处理完成: {main_folder_name}\n")
 
     # 是否还有下一页
     if page_num * PAGE_SIZE >= total:
@@ -204,7 +200,7 @@ while True:
 
 print("=" * 60)
 print(f"全部完成！")
-print(f"处理合同数量: {processed_contracts}")
+print(f"处理发票数量: {processed_invoices}")
 print(f"成功下载文件数量: {total_downloaded}")
 print(f"文件保存路径: {BASE_SAVE_PATH}")
 print("=" * 60)
